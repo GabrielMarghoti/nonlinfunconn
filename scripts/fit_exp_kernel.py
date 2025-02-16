@@ -3,9 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
 import argparse
-from ExponentialConvolution import ExponentialConvolution
-from utilities import irrarray
-import ConvolutionMethods as convm
+from NonlinearFunctionalConnectivity import ExponentialConvolution
+from NonlinearFunctionalConnectivity.utils import *
 
 def eci(x, p, power_t=None):
     """
@@ -199,11 +198,11 @@ def fit_eci_branching(x, y, stim, dt, n_hops_min=3, n_hops_max=5, n_branches_max
 
             # Perform optimization
             if routine == "minimize":
-                error = lambda p, x, y: np.sum(np.power(convm.convolution(stimb, eci(x, p), dt, 8) - y, 2))
+                error = lambda p, x, y: np.sum(np.power(convolution(stimb, eci(x, p), dt, 8) - y, 2))
                 res = minimize(error, p0_tot, args=(x, yb), method=method)
                 p_cur_b = res.x
             elif routine == "least_squares":
-                residuals = lambda p, x, y: convm.convolution(stimb, eci(x, p), dt, 8) - y
+                residuals = lambda p, x, y: convolution(stimb, eci(x, p), dt, 8) - y
                 res = least_squares(residuals, p0_tot, args=(x, yb), method=method, bounds=(lower_bounds, upper_bounds))
                 p_cur_b = res.x
 

@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.optimize import root as root
 from scipy.optimize import root_scalar as root_scalar
-import ConvolutionMethods as convm
+
+from utils import convolution
 
 class ExponentialConvolution:
     """
@@ -802,7 +803,7 @@ class ExponentialConvolution:
         a = self.eval(time)
         b = gamma*np.exp(-gamma*time)
         if np.all(b[1:]<gamma*1e-2): return -10.
-        ap = convm.convolution(a, b, time[1]-time[0], 8)
+        ap = convolution(a, b, time[1]-time[0], 8)
         err = np.average(np.abs(ap-a))
         
         return err-gamma*atol

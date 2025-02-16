@@ -17,15 +17,15 @@ class CustomBuildExtCommand(build_ext):
 
 # Define the C++ extensions
 _integration = Extension(
-    name='utils._integration',
-    sources=['utils/_integration.cpp'],
+    name='_integration',
+    sources=['_integration.cpp'],
     include_dirs=[np.get_include()],  # Include numpy headers
     extra_compile_args=['-O3']  # Optimization flag
 )
 
 _convolution = Extension(
-    name='utils._convolution',
-    sources=['utils/_convolution.cpp', 'utils/convolution.cpp'],
+    name='_convolution',
+    sources=['_convolution.cpp', 'utils/convolution.cpp'],
     include_dirs=[np.get_include()],  # Include numpy headers
     extra_compile_args=['-O3']  # Optimization flag
 )

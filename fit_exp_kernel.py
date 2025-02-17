@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
 import argparse
 from ExponentialConvolution import ExponentialConvolution
-from utilities import irrarray
+from utilities import irrarray                              # irrarray from mistofrutta package
 import ConvolutionMethods as convm
 
 def eci(x, p, power_t=None):

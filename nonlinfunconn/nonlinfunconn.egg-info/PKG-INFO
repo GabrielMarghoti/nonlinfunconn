@@ -1,8 +1,8 @@
 Metadata-Version: 2.1
-Name: NonlinearFunctionalConnectivity
+Name: nonlinfunconn
 Version: 0.1
 Summary: Convolution kernel fitting for complex systems dynamics.
-Home-page: https://github.com/GabrielMarghoti/NonlinearFunctionalConnectivity
+Home-page: https://github.com/GabrielMarghoti/nonlinfunconn
 Author: Gabriel Marghoti
 Author-email: gabrielmarghoti@gmail.com
 Requires-Dist: numpy

@@ -1,3 +1,64 @@
 # Nonlinear Functional Connectivity
-- Convolution kernel fitting for complex systems
-- Nonequilibrium Green Functions for signal propagation in complex networks.
+
+## Overview
+This repository provides implementations for analyzing nonlinear functional connectivity in complex systems. It includes methods for:
+- **Convolution kernel fitting** to model interactions in complex networks.
+- **Nonequilibrium Green Functions (NEGF)** for studying signal propagation in these systems.
+
+Our approach allows kernel fitting in any complex network. Specifically, we apply it to the mapped atlas of *C. elegans*, enabling a deeper understanding of its neural connectivity.
+
+## Features
+- **Convolution Kernel Fitting**: Models the response of complex systems using data-driven approaches.
+- **Nonequilibrium Green Functions**: Computes signal transmission dynamics in networked systems.
+- **Efficient Computation**: Optimized algorithms for large-scale networks.
+- **Application to *C. elegans***: Utilized for analyzing the *C. elegans* brain atlas.
+
+## Installation
+Clone the repository and install the required dependencies:
+```bash
+git clone https://github.com/gabrielmarghoti/nonlinfunconn.git
+cd nonlinear-functional-connectivity
+pip install -r requirements.txt
+```
+
+### Additional Dependencies for *C. elegans* Brain Analysis
+To analyze *C. elegans* neural connectivity, install the following:
+```bash
+pip install git+https://github.com/leiferlab/pumpprobe.git
+pip install wormdatamodel wormbrain
+```
+
+## Usage
+### Convolution Kernel Fitting
+```python
+from kernel_fitting import fit_kernel
+kernel = fit_kernel(data, method='gaussian')
+```
+
+### Nonequilibrium Green Functions
+```python
+from negf import compute_green_function
+green_function = compute_green_function(network, parameters)
+```
+
+### Data for *C. elegans* Brain Analysis
+The data used for analyzing *C. elegans* neural networks is available at: [OSF Repository](https://osf.io/e2syt/)
+
+## References
+For more details on the *C. elegans* brain analysis approach, refer to the paper: [Nature](https://www.nature.com/articles/s41586-023-06683-4)
+
+## Dependencies
+- Python 3.8+
+- NumPy
+- SciPy
+- NetworkX
+- leiferlab/pumpprobe.git
+- wormdatamodel
+- wormbrain
+
+## License
+This project is licensed under the MIT License.
+
+## Contact
+For questions, please contact [gabrielmarghoti@gmail.com] or open an issue.
+

@@ -51,9 +51,10 @@ For more details on the *C. elegans* brain analysis approach, refer to the paper
 - NumPy
 - SciPy
 - NetworkX
+# For C. Elegans analysis:
 - leiferlab/pumpprobe.git
-- wormdatamodel
-- wormbrain
+- leiferlab/wormdatamodel
+- leiferlab/wormbrain
 
   
 ## Contact

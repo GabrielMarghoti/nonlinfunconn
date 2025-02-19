@@ -2,8 +2,8 @@
 
 ## Overview
 This repository provides implementations for analyzing nonlinear functional connectivity in complex systems. It includes methods for:
-- **Convolution kernel fitting** to model interactions in complex networks.
-- **Nonequilibrium Green Functions (NEGF)** for studying signal propagation in these systems.
+- **Convolution kernel fitting** to model interactions in complex networks based on measured data.
+- **Nonequilibrium Green Functions (NEGF)** for studying signal propagation in nonlinear dynamical models.
 
 Our approach allows kernel fitting in any complex network. Specifically, we apply it to the mapped atlas of *C. elegans*, enabling a deeper understanding of its neural connectivity.
 

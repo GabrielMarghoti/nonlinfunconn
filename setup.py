@@ -12,18 +12,17 @@ class CustomBuildExtCommand(build_ext):
 
 # Define the C++ extensions (without hardcoded numpy include)
 
-_convolution = Extension(
-    name='utils._convolution',
-    sources=[
-        os.path.join(os.path.dirname(__file__), 'utils', '_convolution.cpp'),
-        os.path.join(os.path.dirname(__file__), 'utils', 'convolution.cpp')
+ext_convolution = Extension(
+    name='nonlinfunconn.utils._convolution',
+    sources=['nonlinfunconn/utils/_convolution.cpp',
+             'nonlinfunconn/utils/convolution.cpp'
     ],
     extra_compile_args=['-O3']  # Optimization flag
 )
 
-_integration = Extension(
-    name='utils._integration',
-    sources=[os.path.join(os.path.dirname(__file__), 'utils', '_integration.cpp')],
+ext_integration = Extension(
+    name='nonlinfunconn.utils._integration',
+    sources=['nonlinfunconn/utils/_integration.cpp'],
     extra_compile_args=['-O3']  # Optimization flag
 )
 
@@ -35,7 +34,7 @@ setup(
         'numpy',
         'scipy',
     ],
-    ext_modules=[_integration, _convolution],  # List of C++ extensions
+    ext_modules=[ext_integration, ext_convolution],  # List of C++ extensions
     cmdclass={'build_ext': CustomBuildExtCommand},  # Use the custom build_ext command
     author='Gabriel Marghoti',
     author_email='gabrielmarghoti@gmail.com',

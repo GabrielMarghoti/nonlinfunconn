@@ -1,7 +1,7 @@
 README.md
+setup.py
 nonlinfunconn/ExponentialConvolution.py
 nonlinfunconn/__init__.py
-nonlinfunconn/setup.py
 nonlinfunconn.egg-info/PKG-INFO
 nonlinfunconn.egg-info/SOURCES.txt
 nonlinfunconn.egg-info/dependency_links.txt

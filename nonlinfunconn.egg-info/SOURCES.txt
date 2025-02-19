@@ -1,0 +1,12 @@
+README.md
+nonlinfunconn/ExponentialConvolution.py
+nonlinfunconn/__init__.py
+nonlinfunconn/setup.py
+nonlinfunconn.egg-info/PKG-INFO
+nonlinfunconn.egg-info/SOURCES.txt
+nonlinfunconn.egg-info/dependency_links.txt
+nonlinfunconn.egg-info/requires.txt
+nonlinfunconn.egg-info/top_level.txt
+nonlinfunconn/utils/__init__.py
+nonlinfunconn/utils/integration.py
+nonlinfunconn/utils/irrarray.py

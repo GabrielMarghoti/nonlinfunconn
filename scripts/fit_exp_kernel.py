@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
 import argparse
-from nonlinfunconn import ExponentialConvolution
-from nonlinfunconn.utils import convolution, irrarray
+import nonlinfunconn as nlfc
+from nonlinfunconn import convolution, irrarray
 
 def eci(x, p, power_t=None):
     """
@@ -21,10 +21,10 @@ def eci(x, p, power_t=None):
     if not isinstance(p, irrarray):
         # If p is not an irrarray, handle it as a simple array
         if power_t is None:
-            ecj = ExponentialConvolution(p[1:], p[0])
+            ecj = nlfc.ExponentialConvolution(p[1:], p[0])
         else:
             # Handle cases where power_t is provided
-            ecj = ExponentialConvolution(p[1], p[0])
+            ecj = nlfc.ExponentialConvolution(p[1], p[0])
             if power_t[1] > 0:
                 for q in np.arange(power_t[1]):
                     ecj.convolve_exp(p[1])
@@ -34,7 +34,7 @@ def eci(x, p, power_t=None):
     else:
         # If p is an irrarray, handle branching logic
         if power_t is None:
-            ecj = ExponentialConvolution(p(branch=0)[1:], p(branch=0)[0])
+            ecj = nlfc.ExponentialConvolution(p(branch=0)[1:], p(branch=0)[0])
             for b in np.arange(len(p.first_index["branch"]) - 1)[1:]:
                 branch_par = p(branch=b)
                 ecj.branch_path(branch_par[1], branch_par[0])
@@ -45,7 +45,7 @@ def eci(x, p, power_t=None):
             p_b0 = p(branch=0)
             pt_b0 = power_t(branch=0)  # power_t must also be an irrarray
 
-            ecj = ExponentialConvolution([p_b0[1]], p_b0[0])
+            ecj = nlfc.ExponentialConvolution([p_b0[1]], p_b0[0])
             if pt_b0[1] > 0:
                 for q in np.arange(pt_b0[1]):
                     ecj.convolve_exp(p_b0[1])
@@ -65,7 +65,7 @@ def eci(x, p, power_t=None):
                         ecj.convolve_exp(branch_par[h], branch=b)
 
     y = ecj.eval(x)
-    del ecj  # Clean up the ExponentialConvolution object
+    del ecj  # Clean up the nonlinfunconn.ExponentialConvolution object
 
     return y
 

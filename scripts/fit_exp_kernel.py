@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, least_squares
 import argparse
-from NonlinearFunctionalConnectivity import ExponentialConvolution
-from NonlinearFunctionalConnectivity.utils import *
+from nonlinfunconn import ExponentialConvolution
+from nonlinfunconn.utils import convolution, irrarray
 
 def eci(x, p, power_t=None):
     """

@@ -21,7 +21,8 @@ _integration = Extension(
 
 _convolution = Extension(
     name='utils._convolution',
-    sources=['utils/_convolution.cpp', 'utils/convolution.cpp'],
+    sources = ['utils/_convolution.cpp',
+               'utils/convolution.cpp'],
     extra_compile_args=['-O3']  # Optimization flag
 )
 

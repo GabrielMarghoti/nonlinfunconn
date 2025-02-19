@@ -1,13 +1,11 @@
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
-import sys
-import setuptools
+import os
 
 class CustomBuildExtCommand(build_ext):
     """Custom build_ext command to include numpy headers dynamically."""
-
     def build_extensions(self):
-        import numpy as np  # Import numpy only when required
+        import numpy as np
         for ext in self.extensions:
             ext.include_dirs.append(np.get_include())  # Append numpy headers
         super().build_extensions()
@@ -16,15 +14,16 @@ class CustomBuildExtCommand(build_ext):
 
 _convolution = Extension(
     name='utils._convolution',
-    sources = ['utils/_convolution.cpp',
-               'utils/convolution.cpp'],
+    sources=[
+        os.path.join(os.path.dirname(__file__), 'utils', '_convolution.cpp'),
+        os.path.join(os.path.dirname(__file__), 'utils', 'convolution.cpp')
+    ],
     extra_compile_args=['-O3']  # Optimization flag
 )
 
-
 _integration = Extension(
     name='utils._integration',
-    sources=['utils/_integration.cpp'],
+    sources=[os.path.join(os.path.dirname(__file__), 'utils', '_integration.cpp')],
     extra_compile_args=['-O3']  # Optimization flag
 )
 

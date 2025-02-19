@@ -55,9 +55,7 @@ For more details on the *C. elegans* brain analysis approach, refer to the paper
 - wormdatamodel
 - wormbrain
 
-## License
-This project is licensed under the MIT License.
-
+  
 ## Contact
 For questions, please contact [gabrielmarghoti@gmail.com] or open an issue.
 

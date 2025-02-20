@@ -28,7 +28,7 @@ ext_integration = Extension(
 
 setup(
     name='nonlinfunconn',
-    version='0.1',
+    version='0.2',
     packages=find_packages(),  # Automatically find packages
     install_requires=[
         'numpy',

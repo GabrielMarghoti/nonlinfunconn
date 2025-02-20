@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import root as root
 from scipy.optimize import root_scalar as root_scalar
 
-from utils import convolution
+from .utils import convolution
 
 class ExponentialConvolution:
     """

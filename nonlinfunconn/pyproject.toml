@@ -4,3 +4,4 @@ requires = [
     "wheel",
     "numpy>=1.24.4"  # Add numpy as a build dependency
 ]
+build-backend = "setuptools.build_meta"

@@ -4,6 +4,7 @@ class LIF:
     def __init__(self, num_neurons, resolution, time_array, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d):
         """
         Initialize the LIF (Leaky Integrate-and-Fire) model.
+        The NEGF of LIF network requires as entry: the model parameters, nodes states and initial conditions (typically assumed as the equilibrium) variable values.
 
         Parameters:
             num_neurons (int): Number of neurons.

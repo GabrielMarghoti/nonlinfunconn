@@ -5,3 +5,11 @@ requires = [
     "numpy>=1.24.4"  # Add numpy as a build dependency
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "your_project_name"
+version = "0.1.0"
+dependencies = [
+    "numpy>=1.24.4",  # Add numpy as a runtime dependency
+    "matplotlib>=3.7.0"  # Add matplotlib as a runtime dependency
+]

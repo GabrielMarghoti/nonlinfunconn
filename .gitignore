@@ -1,8 +1,17 @@
+# Ignore data and figures folders
+/data/
+/figures/
+
+
 # Virtual environments
 venv/
 .venv/
 env/
 .env/
+
+# Ignore data and figures folders
+/data/
+/figures/
 
 # Python cache files
 __pycache__/

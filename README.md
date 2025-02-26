@@ -8,7 +8,7 @@ This repository provides implementations for analyzing nonlinear functional conn
 Our approach allows kernel fitting in any complex network. Specifically, we apply it to the mapped atlas of *C. elegans*, enabling a deeper understanding of its neural connectivity.
 
 ## Features
-- **Convolution Kernel Fitting**: Models the response of complex systems using data-driven approaches, such kernels might encompass linear or nonlinear assumptions. In the nonlinear case, we develop non-translational kernels based on NonEquilibrium Green Functions (NEGF).
+- **Convolution Kernel Fitting**: Models the response of complex systems using data-driven approaches; such kernels might encompass linear or nonlinear assumptions. In the nonlinear case, we develop non-translational kernels based on NonEquilibrium Green Functions (NEGF).
 - **Nonequilibrium Green Functions**: Computes signal transmission modulator dynamics in networked systems.
 - **Application to *C. elegans***: Utilized for analyzing the *C. elegans* brain atlas.
 
@@ -16,7 +16,7 @@ Our approach allows kernel fitting in any complex network. Specifically, we appl
 Clone the repository and install the required dependencies:
 ```bash
 git clone https://github.com/gabrielmarghoti/nonlinfunconn.git
-cd nonlinear-functional-connectivity
+cd nonlinfunconn
 pip install -r requirements.txt
 ```
 

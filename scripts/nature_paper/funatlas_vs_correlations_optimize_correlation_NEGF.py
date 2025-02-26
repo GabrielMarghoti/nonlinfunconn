@@ -31,8 +31,8 @@ for s in sys.argv:
         shuffle_k = True
    
 
-ds_list = "ds_list_full.txt"
-ds_list_spont = "ds_list_ctrl_wt.txt"
+ds_list = "/home/gabrielm/paper_reproduction/ds_list_full.txt"
+ds_list_spont = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
                   
 signal_kwargs = {"remove_spikes": True,  "smooth": True, 
                  "smooth_mode": "sg_causal", 
@@ -61,9 +61,9 @@ occ3 = funa.get_observation_matrix(req_auto_response=True)
 _,inclall_occ2 = funa.get_occurrence_matrix(req_auto_response=True,inclall=True)
 #q,p = funa.get_kolmogorov_smirnov_q(inclall_occ2,return_p=True,strain=strain)
 if not unc31:
-    q = np.loadtxt("funatlas_intensity_map_cache_q.txt")
+    q = np.loadtxt("/home/gabrielm/paper_reproduction/funatlas_intensity_map_cache_q.txt")
 else:
-    q = np.loadtxt("funatlas_intensity_map_cache_q_unc31.txt")
+    q = np.loadtxt("/home/gabrielm/paper_reproduction/funatlas_intensity_map_cache_q_unc31.txt")
 
 # Prepare array to exclude elements on the diagonal
 ondiag = np.zeros_like(q,dtype=bool)
@@ -151,7 +151,7 @@ for shuffle_k_i in np.arange(shuffle_k_n+1):
                 ax.set_ylabel("kernel-derived correlation (top "+str(len(top_neurons))+" neurons)")
                 fig.tight_layout()
                 if not unc31:
-                    fig.savefig("plots/funatlas_vs_correlations_opt_corr_kernel_vs_spont_scatter.png",dpi=300,bbox_inches="tight")
+                    fig.savefig("figures/funatlas_vs_correlations_opt_corr_kernel_vs_spont_scatter.png",dpi=300,bbox_inches="tight")
                     #fig.savefig("/projects/LEIFER/francesco/funatlas/figures/paper/figS3/funatlas_vs_correlations_opt_corr_kernel_vs_spont_scatter.pdf",bbox_inches="tight")
                 
                 fig22 = plt.figure(22)
@@ -162,7 +162,7 @@ for shuffle_k_i in np.arange(shuffle_k_n+1):
                 ax.imshow(ctnplot,interpolation="none")
                 fig22.tight_layout()
                 if not unc31:
-                    fig22.savefig("plots/funatlas_vs_correlations_opt_corr_kernel.png",dpi=300,bbox_inches="tight")
+                    fig22.savefig("figures/funatlas_vs_correlations_opt_corr_kernel.png",dpi=300,bbox_inches="tight")
                     #fig22.savefig("/projects/LEIFER/francesco/funatlas/figures/paper/figS3/funatlas_vs_correlations_opt_corr_kernel.pdf",bbox_inches="tight")
                 
                 '''fig23 = plt.figure(23)
@@ -177,7 +177,7 @@ for shuffle_k_i in np.arange(shuffle_k_n+1):
                 ax.imshow(ctnplot,interpolation="none")
                 fig23.tight_layout()
                 if not unc31:
-                    fig23.savefig("plots/funatlas_vs_correlations_opt_corr_kernel_sorter.png",dpi=300,bbox_inches="tight")
+                    fig23.savefig("figures/funatlas_vs_correlations_opt_corr_kernel_sorter.png",dpi=300,bbox_inches="tight")
                     fig23.savefig("/projects/LEIFER/francesco/funatlas/figures/paper/figS3/funatlas_vs_correlations_opt_corr_kernel_sorted.pdf",bbox_inches="tight")
                 '''
                 
@@ -202,7 +202,7 @@ if not shuffle:
     ax.set_ylabel("r of kernel-derived correlations\nand spontaneous correlations")
     fig.tight_layout()
     if not unc31:
-        fig.savefig("plots/funatlas_vs_correlations_opt_corr_kernel_vs_spont.png",dpi=300,bbox_inches="tight")
+        fig.savefig("figures/funatlas_vs_correlations_opt_corr_kernel_vs_spont.png",dpi=300,bbox_inches="tight")
     
 if shuffle:
     fig = plt.figure(4)
@@ -212,7 +212,7 @@ if shuffle:
     ax.set_xlabel("correlation coefficient of spontaneous correlations and\nkernels-derived correlations with "+str(top_n_opt)+" driving neurons")
     ax.set_ylabel("density")
     fig.tight_layout()
-    #fig.savefig("plots/funatlas_vs_correlations_opt_corr_kernel_vs_spont_shuffled.png",dpi=300,bbox_inches="tight")
+    #fig.savefig("figures/funatlas_vs_correlations_opt_corr_kernel_vs_spont_shuffled.png",dpi=300,bbox_inches="tight")
     
 if shuffle_k:
     fig = plt.figure(5)
@@ -224,7 +224,7 @@ if shuffle_k:
     ax.set_xlabel("top n")
     ax.set_ylabel("r of kernel-derived correlations\nand spontaneous correlations")
     fig.tight_layout()
-    ###fig.savefig("plots/funatlas_vs_correlations_opt_corr_kernel_vs_spont_shuffled_k.png",dpi=300,bbox_inches="tight")
+    ###fig.savefig("figures/funatlas_vs_correlations_opt_corr_kernel_vs_spont_shuffled_k.png",dpi=300,bbox_inches="tight")
     
     fig = plt.figure(6)
     ax = fig.add_subplot(111)
@@ -233,7 +233,7 @@ if shuffle_k:
     ax.set_xlabel("correlation coefficient of spontaneous correlations and\nkernels-derived correlations with "+str(top_n_opt)+" driving neurons")
     ax.set_ylabel("density")
     fig.tight_layout()
-    ###fig.savefig("plots/funatlas_vs_correlations_opt_corr_kernel_vs_spont_shuffled_k.png",dpi=300,bbox_inches="tight")
+    ###fig.savefig("figures/funatlas_vs_correlations_opt_corr_kernel_vs_spont_shuffled_k.png",dpi=300,bbox_inches="tight")
 
 
 plt.show()

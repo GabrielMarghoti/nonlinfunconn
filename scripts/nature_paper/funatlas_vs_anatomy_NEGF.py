@@ -309,10 +309,10 @@ ax_histx.set_ylim(1,None)
 ax.set_xlabel("Anatomy-derived response $\\Delta V$ (V)\nbiophysical model")
 ax.set_ylabel(r"$\Delta F/F$")
 ax.legend()
-np.savetxt("plots/fig3/funatlas_vs_anatomy_wt_A.txt",np.array([x1,y1]).T,delimiter=",")
-np.savetxt("plots/fig3/funatlas_vs_anatomy_wt_B.txt",np.array([x2,y2]).T,delimiter=",")
+np.savetxt("figures/funatlas_vs_anatomy_wt_A.txt",np.array([x1,y1]).T,delimiter=",")
+np.savetxt("figures/funatlas_vs_anatomy_wt_B.txt",np.array([x2,y2]).T,delimiter=",")
 
-f = open("plots/fig3/funatlas_vs_anatomy_wt.txt","w")
+f = open("figures/funatlas_vs_anatomy_wt.txt","w")
 f.write("x q<0.05,y q<0.05,x q_eq<0.05,y q_eq<0.05\n")
 n1 = len(x1)
 n2 = len(x2)
@@ -332,7 +332,7 @@ f.write(s)
 f.close()
     
 
-fig.savefig("plots/fig3/funatlas_vs_anatomy_wt.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_wt.pdf",dpi=300,bbox_inches="tight")
 
 # Zoomed-in inset for the right marginal distribution
 
@@ -365,13 +365,13 @@ ax.set_xticklabels(["-0.5","0","0.5","1.0"])
 ax.set_xlabel(r"$\Delta F/F$")
 ax.set_ylabel("density of pairs")
 ax.legend(bbox_to_anchor=(1,1), loc="upper left")
-fig.savefig("plots/fig3/funatlas_vs_anatomy_wt_inset.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_wt_inset.pdf",dpi=300,bbox_inches="tight")
 
 # Violin
 y3b = intensity_map_wt[np.logical_and(~np.isnan(intensity_map_wt),actconn>split_distr_th)]
 y4b = intensity_map_wt[np.logical_and(~np.isnan(intensity_map_wt),actconn<=split_distr_th)]
-np.savetxt("plots/fig3/funatlas_vs_anatomy_wt_violin_A.txt",y4b)
-np.savetxt("plots/fig3/funatlas_vs_anatomy_wt_violin_B.txt",y3b)
+np.savetxt("figures/funatlas_vs_anatomy_wt_violin_A.txt",y4b)
+np.savetxt("figures/funatlas_vs_anatomy_wt_violin_B.txt",y3b)
 _,p_all = kstest(y3b,y4b,alternative="less")
 print("Violin plot KS test",p_all)
 print("n actconn<th",y4b.shape)
@@ -389,7 +389,7 @@ ax.set_yticklabels(["0","1","2"],fontsize=30)
 ax.set_ylabel(r"$\Delta F/F$",fontsize=30)
 ax.spines['right'].set_visible(False)
 ax.spines['top'].set_visible(False)
-fig.savefig("plots/fig3/funatlas_vs_anatomy_wt_violin.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_wt_violin.pdf",dpi=300,bbox_inches="tight")
 
 ##################################
 # unc31
@@ -421,7 +421,7 @@ ax_histx.set_xscale("log")
 ax.set_xlabel("Anatomy-derived response (V)\nbiophysical model")
 ax.set_ylabel(r"$\Delta F/F$")
 ax.legend()
-fig.savefig("plots/fig3/funatlas_vs_anatomy_unc31.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_unc31.pdf",dpi=300,bbox_inches="tight")
 
 
 ##################################
@@ -452,7 +452,7 @@ ax.set_ylabel("Pearson's correlation coefficient")
 ax.spines.right.set_visible(False)
 ax.spines.top.set_visible(False)
 fig.tight_layout()
-fig.savefig("plots/fig3/funatlas_vs_anatomy_barplot.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_barplot.pdf",dpi=300,bbox_inches="tight")
 
 ##################################
 # BAR PLOT R2
@@ -480,7 +480,7 @@ ax.set_ylabel(r"$R^2$")
 ax.spines.right.set_visible(False)
 ax.spines.top.set_visible(False)
 fig.tight_layout()
-fig.savefig("plots/fig3/funatlas_vs_anatomy_barplot_R2.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_barplot_R2.pdf",dpi=300,bbox_inches="tight")
 
 ##################################
 # LINE PLOT r
@@ -499,7 +499,7 @@ ax.spines.right.set_visible(False)
 ax.spines.top.set_visible(False)
 ax.legend()
 fig.tight_layout()
-fig.savefig("plots/fig3/funatlas_vs_anatomy_lineplot.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_lineplot.pdf",dpi=300,bbox_inches="tight")
 
 ##################################
 # LINE PLOT R2
@@ -528,8 +528,8 @@ ax.spines.right.set_visible(False)
 ax.spines.top.set_visible(False)
 ax.legend(fontsize=20)
 fig.tight_layout()
-np.savetxt("plots/fig3/funatlas_vs_anatomy_lineplot_R2.txt",np.array([x1,y1,x2,y2]))
-fig.savefig("plots/fig3/funatlas_vs_anatomy_lineplot_R2.pdf",dpi=300,bbox_inches="tight")
+np.savetxt("figures/funatlas_vs_anatomy_lineplot_R2.txt",np.array([x1,y1,x2,y2]))
+fig.savefig("figures/funatlas_vs_anatomy_lineplot_R2.pdf",dpi=300,bbox_inches="tight")
 
 #############################################
 # PEARSON'S r AS A FUNCTION OF OCC3 THRESHOLD
@@ -551,7 +551,7 @@ ax.spines.right.set_visible(False)
 ax.spines.top.set_visible(False)
 ax.legend()
 fig.tight_layout()
-fig.savefig("plots/fig3/funatlas_vs_anatomy_occ3th_r.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_occ3th_r.pdf",dpi=300,bbox_inches="tight")
 
 ####################################
 # R2 AS A FUNCTION OF OCC3 THRESHOLD
@@ -573,7 +573,7 @@ ax.spines.right.set_visible(False)
 ax.spines.top.set_visible(False)
 ax.legend()
 fig.tight_layout()
-fig.savefig("plots/fig3/funatlas_vs_anatomy_occ3th_R2.pdf",dpi=300,bbox_inches="tight")
+fig.savefig("figures/funatlas_vs_anatomy_occ3th_R2.pdf",dpi=300,bbox_inches="tight")
 
 plt.show()
 

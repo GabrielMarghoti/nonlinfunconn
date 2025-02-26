@@ -1,6 +1,6 @@
 # Ignore data and figures folders
-/data/
-/figures/
+data/
+figures/
 
 
 # Virtual environments

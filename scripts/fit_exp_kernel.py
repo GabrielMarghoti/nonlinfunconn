@@ -36,11 +36,22 @@ def eci(x, p, power_t=None):
         # If p is an irrarray, handle branching logic
         if power_t is None:
             ecj = ExponentialConvolution(p(branch=0)[1:], p(branch=0)[0])
-            for b in np.arange(len(p.first_index["branch"]) - 1)[1:]:
+            for b in np.arange(len(p.first_index["branch"]) - 1)[1:]: # iterate over branches using the first_index which indicates the beginning of a branch in the irrarray
                 branch_par = p(branch=b)
-                ecj.branch_path(branch_par[1], branch_par[0])
-                for h in np.arange(len(branch_par))[2:]:
-                    ecj.convolve_exp(branch_par[h], branch=b)
+                
+                ecj.branch_path(branch_par[1], branch_par[0]) # Set the branch parameters as a simple exponential (no power_t), the first element of the irrarray is the amplitude, the rest are the time gamma.
+                                                              # initialite the parameters dictionary of this branch: 
+                                                              #  {"g":g,
+                                                              #  "factor":g*A,
+                                                              #  "power_t": 0,
+                                                              #  "branch": self.n_branches})
+                                                              #  which are updated next based on the conditions.
+                for h in np.arange(len(branch_par))[2:]:      # iterate over the rest of the parameters, which are related to other exponentials (each specified by a single parameter gamma) to be convolved with the first one.
+                    ecj.convolve_exp(branch_par[h], branch=b) # Apply the 4 symbolic conditions, which are:
+                                                              # 1. exp(-ax) convolved with exp(-bx)
+                                                              # 2. x^n*exp(-ax) convolved with exp(-ax)
+                                                              # 3. x*exp(-ax) convolved with exp(-bx)
+                                                              # 4. x^n*exp(-ax) convolved with exp(-bx)
         else:
             # Handle cases where power_t is provided and p is an irrarray
             p_b0 = p(branch=0)
@@ -65,7 +76,7 @@ def eci(x, p, power_t=None):
                     for q in np.arange(pt_bi[h] + 1):
                         ecj.convolve_exp(branch_par[h], branch=b)
 
-    y = ecj.eval(x)
+    y = ecj.eval(x) # sum over the branches
     del ecj  # Clean up the nonlinfunconn.ExponentialConvolution object
 
     return y
@@ -187,7 +198,7 @@ def fit_eci_branching(x, y, stim, dt, n_hops_min=3, n_hops_max=5, n_branches_max
 
             # Combine previous and current parameters
             p0_tot_ = np.append(p0_tot_prev_, p0_cur_b_)
-            p0_tot = irrarray(p0_tot_, [np.append(n_in_prev, i + 1)], ["branch"])
+            p0_tot = irrarray(p0_tot_, np.append(n_in_prev, i + 1), ["branch"])
 
             # Set bounds for optimization
             lower_bounds = -np.inf * np.ones_like(p0_tot)

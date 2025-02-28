@@ -201,7 +201,7 @@ class ExponentialConvolution:
             else:
                 new_ec.exp.append([e for e in self.exp[-1] if e["power_t"]<power_t_trunc])
         else:
-            new_ec = Exponentialconvolution.from_steps(self.steps)
+            new_ec = self.from_steps(self.steps)
             
         return new_ec
         

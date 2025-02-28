@@ -23,7 +23,9 @@ for s in sys.argv:
         shuffle_n = int(sa[1])
         shuffle = True
 
-ds_list_spont = "ds_list_ctrl_wt.txt"
+#ds_list = "/home/gabrielm/paper_reproduction/ds_list_full.txt"
+ds_list_spont = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
+
                   
 signal_kwargs = {"remove_spikes": True,  "smooth": True, 
                  "smooth_mode": "sg_causal", 
@@ -125,8 +127,8 @@ for shuffle_i in np.arange(shuffle_n+1):
             ax.axhline(0,c="k",alpha=0.5)
             ax.set_xlabel(r"$\langle$spontaneous correlation$\rangle_{ds}$")
             ax.set_ylabel("anatomy-derived correlation (top "+str(len(top_neurons))+" neurons)")
-            fig.savefig("plots/funatlas_vs_correlations_opt_corr_kunert_vs_spont_scatter"+add_s+".png",dpi=300,bbox_inches="tight")
-            fig.savefig("plots/fig6/funatlas_vs_correlations_opt_corr_kunert_vs_spont_scatter"+add_s+".pdf",bbox_inches="tight")
+            fig.savefig("figures/funatlas_vs_correlations_opt_corr_kunert_vs_spont_scatter"+add_s+".png",dpi=300,bbox_inches="tight")
+            fig.savefig("figures/funatlas_vs_correlations_opt_corr_kunert_vs_spont_scatter"+add_s+".pdf",bbox_inches="tight")
             fig.tight_layout()
     
 #print([funa_spont.neuron_ids[tn] for tn in top_neurons])
@@ -145,7 +147,7 @@ if not shuffle:
     ax.set_xlabel("top n")
     ax.set_ylabel("r of anatomy-derived correlations\nand spontaneous correlations")
     fig.tight_layout()
-    fig.savefig("plots/funatlas_vs_correlations_opt_corr_kunert_vs_spont"+add_s+".png",dpi=300,bbox_inches="tight")
+    fig.savefig("figures/funatlas_vs_correlations_opt_corr_kunert_vs_spont"+add_s+".png",dpi=300,bbox_inches="tight")
     
 if shuffle:
     fig = plt.figure(4)
@@ -155,7 +157,7 @@ if shuffle:
     ax.set_xlabel("correlation coefficient of spontaneous correlations and\nanatomy-derived correlations with "+str(top_n_opt)+" driving neurons")
     ax.set_ylabel("density")
     fig.tight_layout()
-    fig.savefig("plots/funatlas_vs_correlations_opt_corr_kunert_vs_spont_shuffled"+add_s+".png",dpi=300,bbox_inches="tight")
+    fig.savefig("figures/funatlas_vs_correlations_opt_corr_kunert_vs_spont_shuffled"+add_s+".png",dpi=300,bbox_inches="tight")
 
 
 plt.show()

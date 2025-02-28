@@ -2,8 +2,11 @@ import numpy as np
 
 class irrarray(np.ndarray):
     '''
-    Extension of numpy ndarray that supports "irregular" strides. 
+    Extension of numpy ndarray that supports "irregular" strides.
+    Allows efficient slicing of non-uniform blocks within the array.
     
+    original code by: Franceso Randi from its github repository mistofrutta
+
     This serves mostly just as a shorthand notation for slices of the type
     A[B[i]:B[i+1]], where B contains the first indices of contiguous blocks of
     elements of A (the slice returning "block" i). Using this class, B can be 
@@ -31,7 +34,7 @@ class irrarray(np.ndarray):
     upToIndex = {}
 
     def __new__(cls, input_array, irrStrides, strideNames=["k"], columnNames=["z","y","x"]):
-        obj = np.asarray(input_array).view(cls)
+        obj = np.asarray(input_array).view(cls) # important to use view here, as it initialize the irrarray as subclass of ndarray, and so it can be used as an usual narray but manipulated as an irrArray.
         obj.irrStrides = irrStrides
         obj.strideNames = strideNames
         obj.columnNames = columnNames

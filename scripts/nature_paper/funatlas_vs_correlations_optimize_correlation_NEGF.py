@@ -5,7 +5,7 @@ plt.rc("xtick",labelsize=14)
 plt.rc("ytick",labelsize=14)
 plt.rc("axes",labelsize=14)
 
-top_n_opt = 9#14
+top_n_opt = 14
 merge = "--no-merge" not in sys.argv
 print("merge:",merge)
 to_paper = "--to-paper" in sys.argv

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize, least_squares
 from typing import Optional, Tuple, Union
 from nonlinfunconn import convolution
-
+from ..utils.irrarray import irrarray
 
 class LIF:
     """
@@ -138,9 +138,13 @@ class LIF:
         exp_term = np.exp(-beta * (V - V_th))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
-    def compute_equilibrium_green_functions(self):
+    def compute_equilibrium_green_functions(self,
+        n_neigh_max: int = 2):
         """
         Compute the equilibrium Green's functions for the LIF network.
+
+        Parameter:
+            n_neigh_max (int): Maximum number of neighbors for fitting the effective NEGF for nodes not direct connected.
         """
         time_diff = np.arange(self.resolution)[:, None] - np.arange(self.resolution)
         heaviside_diff = self.heaviside(time_diff)
@@ -202,6 +206,7 @@ class LIF:
                                                                    self.sigma[t_prime:t, t_prime, i, j], self.dt, 8)
                             self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
 
+
     @classmethod
     def fit(
         cls,
@@ -213,7 +218,8 @@ class LIF:
         rms_tol: float = 1e-2,
         method: Optional[str] = None,
         routine: str = "least_squares",
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        p0: Optional[np.ndarray] = None
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Fit the LIF model to the given signal.
 
@@ -230,9 +236,10 @@ class LIF:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: Fitted parameters, branch parameters, and residuals.
         """
-        # Initialize parameters
+                
         num_neurons = signal.shape[1]
         resolution = signal.shape[0]
+    
         Veq = np.mean(signal, axis=0)
         Seq = np.zeros((num_neurons, num_neurons))
         Vs = np.zeros((resolution, num_neurons))
@@ -247,12 +254,13 @@ class LIF:
         a_r = np.zeros_like(gamma_g)
         a_d = np.zeros_like(gamma_g)
 
-        # Create LIF instance
         lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d)
         lif.compute_equilibrium_green_functions()
         lif.compute_nonequilibrium_green_functions()
 
-        # Optimization routine
+        if p0 is None:
+            p0 = np.random.rand(num_neurons)
+
         if routine == "minimize":
             error = lambda p, x, y: np.sum(np.power(convolution(x, cls.eci(x, p), dt, 8) - y, 2))
             res = minimize(error, p0, args=(signal, signal), method=method)
@@ -260,4 +268,4 @@ class LIF:
             residuals = lambda p, x, y: convolution(x, cls.eci(x, p), dt, 8) - y
             res = least_squares(residuals, p0, args=(signal, signal), method=method)
 
-        return res.x, None, None  # Placeholder for branch_params and residuals
+        return res.x, None, None

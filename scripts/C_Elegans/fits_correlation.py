@@ -97,6 +97,32 @@ funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
 # Get the direct anatomical connectome
 aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
 
+def get_signal_correlations(ds_list=None):
+    r_act = np.ones((n_neurons,n_neurons))*np.nan
+    count = np.ones((n_neurons,n_neurons))
+    
+    if ds_list is None: ds_list = np.arange(len(self.ds_list))
+    
+    for i_ds in ds_list:
+        r_act_ = np.corrcoef(self.sig[i_ds].data.T)
+        # Translate it in the atlas reference frame
+        for i in np.arange(r_act_.shape[0]):
+            ai = self.atlas_i[i_ds][i]
+            if ai<0: continue
+            for j in np.arange(r_act_.shape[1]):
+                aj = self.atlas_i[i_ds][j]
+                if aj<0: continue
+                if np.isnan(r_act[ai,aj]):
+                    r_act[ai,aj] = r_act_[i,j]
+                else:
+                    r_act[ai,aj] += r_act_[i,j]
+                count[ai,aj] += 1
+    
+    r_act[count!=0] = r_act[count!=0]/count[count!=0]
+    
+    return r_act
+
+
 # Fit ECI parameters for each stimulus
 for stim_idx in range(fconn.n_stim):
     stim_neuron = fconn.stim_neurons[stim_idx]
@@ -149,33 +175,15 @@ if save_results:
 # Compute correlation matrices
 funatlas = pp.Funatlas.from_datasets("ds_list.txt", merge_bilateral=True, signal="green")
 
-    def get_signal_correlations(self,ds_list=None):
-        r_act = np.ones((self.n_neurons,self.n_neurons))*np.nan
-        count = np.ones((self.n_neurons,self.n_neurons))
-        
-        if ds_list is None: ds_list = np.arange(len(self.ds_list))
-        
-        for i_ds in ds_list:
-            r_act_ = np.corrcoef(self.sig[i_ds].data.T)
-            # Translate it in the atlas reference frame
-            for i in np.arange(r_act_.shape[0]):
-                ai = self.atlas_i[i_ds][i]
-                if ai<0: continue
-                for j in np.arange(r_act_.shape[1]):
-                    aj = self.atlas_i[i_ds][j]
-                    if aj<0: continue
-                    if np.isnan(r_act[ai,aj]):
-                        r_act[ai,aj] = r_act_[i,j]
-                    else:
-                        r_act[ai,aj] += r_act_[i,j]
-                    count[ai,aj] += 1
-        
-        r_act[count!=0] = r_act[count!=0]/count[count!=0]
-        
-        return r_act
 
-corr_lin_kernels = funatlas.get_signal_correlations()
-corr_NEGF_kernels = funatlas.get_signal_correlations()
+# Get the kernel-derived correlations
+conv_lin_kernel_stim = funa.get_kernels_map(occ2,occ3,filtered=True,include_flat_kernels=True)
+#ec_conv_stim[q>0.05]=np.nan
+ck = funa.get_correlation_from_kernels_map(km,occ3,set_unknown_to_zero=False)
+
+
+corr_lin_kernels = funatlas.get_correlation_from_kernels_map(conv_lin_kernel_stim,occ3,js=None, set_unknown_to_zero=False)
+corr_NEGF_kernels = get_correlation_from_NEGF()
 
 # Compute correlations
 r_spont_stim = np.corrcoef(spontcorr[~np.isnan(stimcorr)], stimcorr[~np.isnan(stimcorr)])[0, 1]

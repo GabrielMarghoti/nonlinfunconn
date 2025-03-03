@@ -3,6 +3,10 @@ import numpy as np
 
 from nonlinfunconn import convolution
 
+
+import numpy as np
+from nonlinfunconn import convolution
+
 class LIF:
     def __init__(self, num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d):
         """
@@ -29,9 +33,8 @@ class LIF:
 
         self.num_neurons = num_neurons
         self.dt = dt
-        self.resolution = Vs.shape[1]
-
-        # Expand scalar parameters to arrays if necessary
+        self.resolution = Vs.shape[0]
+        
         self.Veq = self._expand_to_array(Veq, num_neurons)
         self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
         self.Vs = Vs
@@ -45,15 +48,8 @@ class LIF:
         self.Es = self._expand_to_array(Es, (num_neurons, num_neurons))
         self.a_r = self._expand_to_array(a_r, (num_neurons, num_neurons))
         self.a_d = self._expand_to_array(a_d, (num_neurons, num_neurons))
-
-        # Initialize Green function arrays
-        self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.gg_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.gs_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.g_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.sigma = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.pi = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.g = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
+        
+        self._initialize_green_functions()
 
     def _expand_to_array(self, value, shape):
         if np.isscalar(value):
@@ -66,10 +62,22 @@ class LIF:
         else:
             raise TypeError(f"Expected scalar or numpy array, but got {type(value)}")
 
-    def heaviside(self, t):
-        return np.where(t >= 0, 1.0, 0.0)
+    def _initialize_green_functions(self):
+        """Initialize all Green function matrices with zeros."""
+        shape = (self.resolution, self.resolution, self.num_neurons, self.num_neurons)
+        self.sigma_0 = np.zeros(shape)
+        self.gg_0 = np.zeros(shape)
+        self.gs_0 = np.zeros(shape)
+        self.g_0 = np.zeros(shape)
+        self.sigma = np.zeros(shape)
+        self.pi = np.zeros(shape)
+        self.g = np.zeros(shape)
 
-    def synaptic_activation(self, V, beta, V_th):
+    @staticmethod
+    def heaviside(t):
+        return np.where(t >= 0, 1.0, 0.0)
+    
+    def synaptic_activation(self, V: np.ndarray, beta: np.ndarray, V_th: np.ndarray) -> np.ndarray:
         return 1 / (1 + np.exp(-beta * (V - V_th)))
 
     def d_synaptic_activation(self, V, beta, V_th):
@@ -77,85 +85,61 @@ class LIF:
         return (beta * exp_term) / (1 + exp_term) ** 2
 
     def compute_equilibrium_green_functions(self):
-        time_diff = self.time_array[:, None] - self.time_array
+        """Vectorized computation of equilibrium Green's functions."""
+        time_diff = np.subtract.outer(self.time_array, self.time_array)
         heaviside_diff = self.heaviside(time_diff)
 
-        for i in range(self.num_neurons):
-            for j in range(i, self.num_neurons):
-                exp_term = np.exp(-time_diff * (self.a_d[i, j] - self.a_r[i, j] / (1 + np.exp(-self.beta[i, j] * (self.Veq[j] - self.V_th[i, j])))))
-                self.sigma_0[:, :, i, j] = heaviside_diff * self.a_r[i, j] * (1 - self.Seq[i, j]) * self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j]) * exp_term
+        exp_term = np.exp(-time_diff[:, :, None, None] * 
+                           (self.a_d - self.a_r / (1 + np.exp(-self.beta * (self.Veq[:, None] - self.V_th)))))
+        self.sigma_0 = heaviside_diff[:, :, None, None] * self.a_r * (1 - self.Seq) * \
+                       self.d_synaptic_activation(self.Veq[:, None], self.beta, self.V_th) * exp_term
 
-                exp_term_gg = np.exp(-time_diff * (self.gamma[i] + np.sum(self.gamma_g[i, :]) + np.sum(self.gamma_s[i, :] * self.Seq[i, :])))
-                self.gg_0[:, :, i, j] = heaviside_diff * self.gamma_g[i, j] * exp_term_gg
+        exp_term_gg = np.exp(-time_diff[:, :, None, None] * (self.gamma + np.sum(self.gamma_g, axis=1)[:, None] +
+                        np.sum(self.gamma_s * self.Seq, axis=1)[:, None]))
+        self.gg_0 = heaviside_diff[:, :, None, None] * self.gamma_g * exp_term_gg
+        self.gs_0 = heaviside_diff[:, :, None, None] * self.gamma_s * (self.Es - self.Veq[:, None]) * exp_term_gg
 
-                self.gs_0[:, :, i, j] = heaviside_diff * self.gamma_s[i, j] * (self.Es[i, j] - self.Veq[i]) * exp_term_gg
-
-                for t in range(self.resolution):
-                    for t_prime in range(t):
-                        self.g_0[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + convolution(self.gs_0[t, t_prime:t, i, j], self.sigma_0[t_prime:t, t_prime, i, j], self.dt, 8)
+        self.g_0 = self.gg_0 + convolution(self.gs_0, self.sigma_0, self.dt, 8)
 
     def compute_nonequilibrium_green_functions(self):
+        """Iteratively compute non-equilibrium Green's functions."""
         conv_sigma_V = np.zeros((self.resolution, self.num_neurons, self.num_neurons))
+        for _ in range(3):  # Iterative refinement
+            synaptic_diff = (self.synaptic_activation(self.Vs[:, None, :], self.beta, self.V_th) -
+                             self.synaptic_activation(self.Veq[:, None], self.beta, self.V_th)) / self.delta_Vs[:, None, :]
+            
+            self.sigma = self.sigma_0 / self.d_synaptic_activation(self.Veq[:, None], self.beta, self.V_th) * synaptic_diff
+            conv_sigma_V = convolution(self.sigma, self.delta_Vs, self.dt, 8)
+            
+            self.pi = convolution(self.gs_0, (1 - (self.delta_Vs[:, None] / (self.Es - self.Veq[:, None]))) * self.sigma, self.dt, 8)
+            self.g = self.gg_0 + self.pi
 
-        for itr in range(3):  # Iterative method to approximate sigma
-            for i in range(self.num_neurons):
-                for j in range(i, self.num_neurons):
-                    for t in range(self.resolution):
-                        for t_prime in range(t):
-                            if self.Vs[t_prime, j] == self.Veq[j]:
-                                self.sigma[t, t_prime, i, j] = 0.0
-                            else:
-                                synaptic_diff = (self.synaptic_activation(self.Vs[t_prime, j], self.beta[i, j], self.V_th[i, j]) - self.synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j])) / self.delta_Vs[t_prime, j]
-                                self.sigma[t, t_prime, i, j] = self.sigma_0[t, t_prime, i, j] / self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j]) * synaptic_diff * (1 - (conv_sigma_V[t_prime, i, j] / (1 - self.Seq[i, j])))
-
-                        conv_sigma_V[t, i, j] = convolution(self.sigma[t, :t, i, j], self.delta_Vs[:t, j], self.dt, 8)
-
-                        for t_prime in range(t):
-                            self.pi[t, t_prime, i, j] = convolution(self.gs_0[t, t_prime:t, i, j], (1 - (self.delta_Vs[t_prime:t, i] / (self.Es[i, j] - self.Veq[i]))) * self.sigma[t_prime:t, t_prime, i, j], self.dt, 8)
-                            self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
-
-    def fit(cls,x,dt,
-            n_neigh_max=2,
-            rms_limits=[None,None],auto_stop=False,rms_tol=1e-2,
-            method=None,routine="least_squares"):
-        
-                """
-        Fit the LIF model to the given signal for the entire network at once.
+    def fit(self, x, dt, method='least_squares', auto_stop=False, rms_tol=1e-2):
+        """
+        Fit the LIF model to input data using least-squares optimization.
 
         Parameters:
-            signal (np.ndarray): Signal to fit, entire network. Can be real data or synthetic data.
+            x (np.ndarray): Signal to fit and use as input. Can be real data or synthetic data but it needs to encompass all the nodes which nonlinear signal propagation pass through.
             dt: Time step.
 
         Returns:
             params: Fitted parameters.
-            branch_params: Fitted branch parameters.
             residuals: Residuals.
         """
         
-        # Initialize parameters
-        num_neurons = signal.shape[1]
-        resolution = signal.shape[0]
-        Veq = np.mean(signal, axis=0)
-        Seq = np.zeros((num_neurons, num_neurons))
-        Vs = np.zeros((resolution, num_neurons))
-        delta_Vs = np.zeros((resolution, num_neurons))
-        delta_Ss = np.zeros((resolution, num_neurons, num_neurons))
-        gamma_g = np.zeros((num_neurons, num_neurons))
-        gamma_s = np.zeros((num_neurons, num_neurons))
-        gamma = np.zeros(num_neurons)
-        beta = np.zeros((num_neurons, num_neurons))
-        V_th = np.zeros((num_neurons, num_neurons))
-        Es = np.zeros((num_neurons, num_neurons))
-        a_r = np.zeros((num_neurons, num_neurons))
-        a_d = np.zeros((num_neurons, num_neurons))
-
-        # Fit the model
-        lif = LIF(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d)
-        lif.compute_equilibrium_green_functions()
-        lif.compute_nonequilibrium_green_functions()
-
-
-        from scipy.optimize import root,minimize,least_squares
+        from scipy.optimize import least_squares
+        
+        """
+        num_neurons = x.shape[1]
+        Veq = np.mean(x, axis=0)
+        params = np.random.rand(num_neurons)
+        
+        def residuals(p):
+            return convolution(x, self.synaptic_activation(x, p, Veq), dt, 8) - x
+        
+        res = least_squares(residuals, params, method=method)
+        return res.x, res.cost
+        """
         rms = []
         
         y_norm = np.sum(y)
@@ -239,3 +223,9 @@ class LIF:
         gc.collect()
             
         return p_prev,n_in_prev,rms
+
+# Example Usage:
+# lif = LIF(num_neurons=10, dt=0.01, Veq=..., Seq=..., Vs=..., delta_Vs=..., delta_Ss=..., gamma_g=..., gamma_s=..., gamma=..., beta=..., V_th=..., Es=..., a_r=..., a_d=...)
+# lif.compute_equilibrium_green_functions()
+# lif.compute_nonequilibrium_green_functions()
+# fitted_params, error = lif.fit(x, dt=0.01)

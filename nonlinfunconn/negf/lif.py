@@ -179,9 +179,13 @@ class LIF:
             for t_prime in range(t):
                 self.g_0[t, t_prime] = self.gg_0[t, t_prime] + convolution(self.gs_0[t, t_prime:t], self.sigma_0[t_prime:t, t_prime], self.dt, 8)
 
-    def compute_nonequilibrium_green_functions(self):
+    def compute_nonequilibrium_green_functions(self,
+        n_neigh_max: int = 2):
         """
-        Compute the non-equilibrium Green's functions for the LIF network.
+            Compute the nonequilibrium Green's functions for the LIF network.
+
+            Parameter:
+                n_neigh_max (int): Maximum number of neighbors for fitting the effective NEGF for nodes not direct connected.
         """
         conv_sigma_V = np.zeros((self.resolution, self.num_neurons, self.num_neurons))
 

@@ -143,7 +143,7 @@ def plot_kernels(t_eval, kernel_params, trial_folder, node_idx):
     print(f"Kernel plot saved to {plot_path}")
 
 def fit_eci_branching(x, y, stim, dt, n_hops_min=3, n_hops_max=5, n_branches_max=5,
-                      rms_limits=[None, None], auto_stop=False, rms_tol=1e-2,
+                      rms_limits=[None, None], auto_stop=True, rms_tol=1e-2,
                       method=None, routine="least_squares"):
     """
     Fit an Exponential Convolution Integral (ECI) model with branching.

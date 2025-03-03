@@ -19,21 +19,20 @@ save_results = "--no-save" not in sys.argv
 use_green_signal = "--signal:green" in sys.argv
 skip_unconfirmed_targets = "--skip-if-not-manually-located" in sys.argv
 matchless_nan_th = None
-matchless_nan_th = None
 matchless_nan_th_from_file = "--matchless-nan-th-from-file" in sys.argv
 matchless_nan_th_added_only = "--matchless-nan-th-added-only" in sys.argv
+merge = "--merge" in sys.argv
+ds_tags = [arg for arg in sys.argv if arg.startswith("--ds-tag:")]
+ds_exclude_tags = [arg for arg in sys.argv if arg.startswith("--ds-exclude-tag:")]      
 
+# default values
+folder = "figures"
 
 for arg in sys.argv:
     if arg.startswith("--matchless-nan-th:"):
         matchless_nan_th = float(arg.split(":")[1])
     elif arg.startswith("--folder:"):
         folder = float(arg.split(":")[1])
-
-
-# Validate arguments
-if (matchless_nan_th is not None) and not use_green_signal:
-    raise ValueError("--matchless-nan-th can only be used with --signal:green")
 
 ds_list = "ds_list_full.txt"
 ds_list_spont = "ds_list_ctrl_wt.txt"
@@ -48,7 +47,7 @@ signal_kwargs = {"remove_spikes": True,  "smooth": True,
                  "matchless_nan_th_added_only": matchless_nan_th_added_only}
 
 # Ensure output directory exists
-fits_dir = folder + "responses/fits/"
+fits_dir = folder
 os.makedirs(fits_dir, exist_ok=True)
 
 # Initialize logging pipeline
@@ -96,7 +95,7 @@ funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
                                  verbose=False)
 
 # Get the direct anatomical connectome
-aconn = funa.aconn_chem + funa.aconn_gap
+aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
 
 # Fit ECI parameters for each stimulus
 for stim_idx in range(fconn.n_stim):

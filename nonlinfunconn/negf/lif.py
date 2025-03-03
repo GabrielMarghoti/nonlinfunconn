@@ -113,3 +113,41 @@ class LIF:
                         for t_prime in range(t):
                             self.pi[t, t_prime, i, j] = convolution(self.gs_0[t, t_prime:t, i, j], (1 - (self.delta_Vs[t_prime:t, i] / (self.Es[i, j] - self.Veq[i]))) * self.sigma[t_prime:t, t_prime, i, j], self.dt, 8)
                             self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
+
+    def fit(signal, dt):
+        """
+        Fit the LIF model to the given signal for the entire network at once.
+
+        Parameters:
+            signal (np.ndarray): Signal to fit, entire network. Can be real data or synthetic data.
+            dt: Time step.
+
+        Returns:
+            params: Fitted parameters.
+            branch_params: Fitted branch parameters.
+            residuals: Residuals.
+        """
+        
+        # Initialize parameters
+        num_neurons = signal.shape[1]
+        resolution = signal.shape[0]
+        Veq = np.mean(signal, axis=0)
+        Seq = np.zeros((num_neurons, num_neurons))
+        Vs = np.zeros((resolution, num_neurons))
+        delta_Vs = np.zeros((resolution, num_neurons))
+        delta_Ss = np.zeros((resolution, num_neurons, num_neurons))
+        gamma_g = np.zeros((num_neurons, num_neurons))
+        gamma_s = np.zeros((num_neurons, num_neurons))
+        gamma = np.zeros(num_neurons)
+        beta = np.zeros((num_neurons, num_neurons))
+        V_th = np.zeros((num_neurons, num_neurons))
+        Es = np.zeros((num_neurons, num_neurons))
+        a_r = np.zeros((num_neurons, num_neurons))
+        a_d = np.zeros((num_neurons, num_neurons))
+
+        # Fit the model
+        lif = LIF(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d)
+        lif.compute_equilibrium_green_functions()
+        lif.compute_nonequilibrium_green_functions()
+
+        return lif

@@ -99,6 +99,12 @@ for stim_idx in range(fconn.n_stim):
             x, y, stim_response, dt=fconn.Dt, n_branches_max=2
         )
         
+        
+        params_nonlin, branch_params_nonlin, _ = NEGF_LIF.fit(
+            x, y, dt=fconn.Dt, n_branches_max=2
+        )
+
+
         if params is None:
             tubatura.log(f"Constrained params is None for stim {stim_idx}, neuron {resp_neuron}")
             continue

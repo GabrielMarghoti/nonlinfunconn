@@ -123,13 +123,6 @@ for stim_idx in range(fconn.n_stim):
         params, branch_params, _ = fconn.fit_eci_branching(
             x, y, stim_response, dt=fconn.Dt, n_branches_max=2
         )
-        
-
-        
-        params_nonlin, branch_params_nonlin, _ = NEGF_LIF.fit(
-            x, y, dt=fconn.Dt, n_branches_max=2
-        )
-
 
         if params is None:
             tubatura.log(f"Constrained params is None for stim {stim_idx}, neuron {resp_neuron}")
@@ -141,13 +134,48 @@ for stim_idx in range(fconn.n_stim):
             "n_branch_params": branch_params
         }
 
+
+"""
+# Fit NEGF parameters fitting
+        params_nonlin, branch_params_nonlin, _ = NEGF_LIF.fit(
+            x, y, dt=fconn.Dt, n_branches_max=2
+        )
+"""
+
+
 if save_results:
     fconn.to_file(folder)
 
 # Compute correlation matrices
 funatlas = pp.Funatlas.from_datasets("ds_list.txt", merge_bilateral=True, signal="green")
-stimcorr = funatlas.get_signal_correlations()
-spontcorr = funatlas.get_signal_correlations(spontaneous=True)
+
+    def get_signal_correlations(self,ds_list=None):
+        r_act = np.ones((self.n_neurons,self.n_neurons))*np.nan
+        count = np.ones((self.n_neurons,self.n_neurons))
+        
+        if ds_list is None: ds_list = np.arange(len(self.ds_list))
+        
+        for i_ds in ds_list:
+            r_act_ = np.corrcoef(self.sig[i_ds].data.T)
+            # Translate it in the atlas reference frame
+            for i in np.arange(r_act_.shape[0]):
+                ai = self.atlas_i[i_ds][i]
+                if ai<0: continue
+                for j in np.arange(r_act_.shape[1]):
+                    aj = self.atlas_i[i_ds][j]
+                    if aj<0: continue
+                    if np.isnan(r_act[ai,aj]):
+                        r_act[ai,aj] = r_act_[i,j]
+                    else:
+                        r_act[ai,aj] += r_act_[i,j]
+                    count[ai,aj] += 1
+        
+        r_act[count!=0] = r_act[count!=0]/count[count!=0]
+        
+        return r_act
+
+corr_lin_kernels = funatlas.get_signal_correlations()
+corr_NEGF_kernels = funatlas.get_signal_correlations()
 
 # Compute correlations
 r_spont_stim = np.corrcoef(spontcorr[~np.isnan(stimcorr)], stimcorr[~np.isnan(stimcorr)])[0, 1]

@@ -12,7 +12,8 @@ import os, sys
 import pumpprobe as pp
 import wormdatamodel as wormdm
 import wormbrain as wormb
-import mistofrutta as mf
+
+import nonlinfunconn as nlf # for non-linear kernels
 
 plot = True
 
@@ -23,6 +24,8 @@ skip_if_not_manually_located = "--skip-if-not-manually-located" in sys.argv
 matchless_nan_th = None
 matchless_nan_th_from_file = "--matchless-nan-th-from-file" in sys.argv
 matchless_nan_th_added_only = "--matchless-nan-th-added-only" in sys.argv
+merge = "--no-merge" not in sys.argv
+ds_exclude_tags = "mutant" if "--unc31" in sys.argv else None
 
 # default 
 output_folder = "figures/"
@@ -108,14 +111,80 @@ def load_ds_list(fname,tags=None,exclude_tags=None,return_tags=False):
         return ds_list, ds_tags_lists
     else:
         return ds_list
+
+def get_aconnectome_from_file(chem_th=3,gap_th=2,exclude_white=False,
+                                average=False):
+    '''Load the anatomical connectome data from all the sources listed in 
+    the class.
     
+    Returns
+    -------
+    chem: numpy.ndarray
+        chem[i,j] is the count of chemical synapses from j to i, averaged
+        across the sources.
+    gap: numpy.ndarray
+        gap[i,j] is the count of gap junctions from j to i, averaged
+        across the sources.
+    '''
+    chem = np.zeros((n_neurons, n_neurons))
+    gap = np.zeros((n_neurons, n_neurons))
+        
+    aconn_sources = [#{"type": "white", "fname": "aconnectome.json", "ids_fname":"aconnectome_ids.txt"},
+                     {"type": "whiteA", "fname": "aconnectome_white_1986_whole.csv"},
+                     {"type": "whiteL4", "fname": "aconnectome_white_1986_L4.csv"},
+                     {"type": "witvliet", "fname": "aconnectome_witvliet_2020_7.csv"},
+                     {"type": "witvliet", "fname": "aconnectome_witvliet_2020_8.csv"}
+                     ]
+    
+    sources_used = 0
+    for source in aconn_sources:
+        if source["type"]=="white" and not exclude_white:
+            c, g = self._get_aconnectome_white(
+                                    self.module_folder+source["fname"],
+                                    self.module_folder+source["ids_fname"])
+        elif source["type"] in ["whiteL4","whiteA"] and not exclude_white:
+            c, g = self._get_aconnectome_witvliet(
+                                    self.module_folder+source["fname"])
+        elif source["type"]=="witvliet":
+            c, g = self._get_aconnectome_witvliet(
+                                    self.module_folder+source["fname"])
+        else:
+            continue
+        
+        chem += c
+        gap += g
+        sources_used += 1
+    
+    if average:    
+        chem /= sources_used
+        gap /= sources_used
+    
+    chem[chem<=chem_th] = 0
+    gap[gap<=gap_th] = 0
+        
+    return chem, gap
+
 ds_list, ds_tags = load_ds_list(ds_list_path, return_tags=True)
 ds_list_spont, ds_spont_tags = load_ds_list(ds_list_spont_path, return_tags=True)
 
+# get connectome from pp.Funatlas class
+funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
+                                 signal_kwargs = signal_kwargs,
+                                 enforce_stim_crosscheck=False,
+                                 ds_tags=ds_tags,ds_exclude_tags=ds_exclude_tags,
+                                 verbose=False)
 
+aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
+
+print("aconn_chem",aconn_chem.shape)
+print("aconn_elec",aconn_elec.shape)
+print("aconn_chem",aconn_chem)  
+print("aconn_elec",aconn_elec)
 # Iterate over the folders whcih contains each experiment data
 for (i, folder) in enumerate(ds_list):
 
+    if i>2: break   # remove to process all datasets
+    print("Processing dataset", i, ":", folder)
     # Ensure output directory exists
     fits_dir = output_folder + "_".join(ds_tags[i]) + "_fits/"
     os.makedirs(fits_dir, exist_ok=True)
@@ -298,7 +367,13 @@ for (i, folder) in enumerate(ds_list):
                         "n_branches": len(n_branch_params), 
                         "n_branch_params": n_branch_params}
             fconn.fit_params[ie][neu_j] = params_dict
-            
+
+############################################################################################################################################
+########### #NEGF kernels
+############################################################################################################################################
+
+            nonlin_kernel = nlf.negf.LIF(num_neurons =  aconn_elec.shape[0], gamma_g = aconn_elec, gamma_s = aconn_chem)
+
             if neu_j in responding_original and plot:
                 #print("plotting")
                 # Plot only for detected responses
@@ -344,7 +419,6 @@ for (i, folder) in enumerate(ds_list):
             plt.close(fig=fig)
 """
     # Get the direct anatomical connectome
-    aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
 
     def get_signal_correlations(ds_list=None):
         r_act = np.ones((n_neurons,n_neurons))*np.nan

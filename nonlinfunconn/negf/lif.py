@@ -4,60 +4,59 @@ from typing import Optional, Tuple, Union
 from nonlinfunconn import convolution
 from ..utils.irrarray import irrarray
 
+import numpy as np
+from typing import Union, Tuple
+
+import numpy as np
+from typing import Union, Tuple
+
 class LIF:
     """
     Leaky Integrate-and-Fire (LIF) neural network model with Green's function computation.
-    This class implements equilibrium and non-equilibrium Green's functions for a network of LIF neurons.
     """
 
     def __init__(
         self,
-        num_neurons: int,
-        dt: float,
-        Veq: Union[float, np.ndarray],
-        Seq: Union[float, np.ndarray],
-        Vs: np.ndarray,
-        delta_Vs: np.ndarray,
-        delta_Ss: np.ndarray,
-        gamma_g: Union[float, np.ndarray],
-        gamma_s: Union[float, np.ndarray],
-        gamma: Union[float, np.ndarray],
-        beta: Union[float, np.ndarray],
-        V_th: Union[float, np.ndarray],
-        Es: Union[float, np.ndarray],
-        a_r: Union[float, np.ndarray],
-        a_d: Union[float, np.ndarray],
+        dt: float = 1.0,
+        num_neurons: int = None,
+        Veq: Union[float, np.ndarray] = 0.0,
+        Seq: Union[float, np.ndarray] = 0.0,
+        Vs: np.ndarray = None,
+        Ss: np.ndarray = None,  # Synaptic state variable
+        gamma_g: Union[float, np.ndarray] = 10.0,
+        gamma_s: Union[float, np.ndarray] = 10.0,
+        gamma: Union[float, np.ndarray] = 10.0,
+        beta: Union[float, np.ndarray] = 125,
+        V_th: Union[float, np.ndarray] = 0.0,
+        Es: Union[float, np.ndarray] = 0.0,          
+        a_r: Union[float, np.ndarray] = 1.0,
+        a_d: Union[float, np.ndarray] = 5.0,
     ):
         """
         Initialize the LIF model.
-
-        Parameters:
-            num_neurons (int): Number of neurons in the network.
-            dt (float): Time step for simulations.
-            Veq (Union[float, np.ndarray]): Equilibrium membrane potentials.
-            Seq (Union[float, np.ndarray]): Equilibrium synaptic states.
-            Vs (np.ndarray): Membrane potentials over time (shape: [resolution, num_neurons]).
-            delta_Vs (np.ndarray): Deviation from equilibrium membrane potentials (shape: [resolution, num_neurons]).
-            delta_Ss (np.ndarray): Deviation from equilibrium synaptic states (shape: [resolution, num_neurons, num_neurons]).
-            gamma_g (Union[float, np.ndarray]): Gap junction coupling strengths.
-            gamma_s (Union[float, np.ndarray]): Chemical synapse coupling strengths.
-            gamma (Union[float, np.ndarray]): Leakage rates.
-            beta (Union[float, np.ndarray]): Synaptic activation steepness.
-            V_th (Union[float, np.ndarray]): Threshold potentials.
-            Es (Union[float, np.ndarray]): Synaptic reversal potentials.
-            a_r (Union[float, np.ndarray]): Synaptic rise rates.
-            a_d (Union[float, np.ndarray]): Synaptic decay rates.
         """
-        self.num_neurons = num_neurons
         self.dt = dt
-        self.resolution = Vs.shape[0]
+        self.num_neurons = num_neurons
 
-        # Expand scalar parameters to arrays if necessary
+        if self.num_neurons is None:
+            raise ValueError("num_neurons must be specified.")
+
+        # Expand scalar parameters to arrays
         self.Veq = self._expand_to_array(Veq, num_neurons)
         self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
-        self.Vs = Vs
-        self.delta_Vs = delta_Vs
-        self.delta_Ss = delta_Ss
+
+        # If Vs is not given, assume equilibrium
+        self.Vs = Vs if Vs is not None else np.full((100, num_neurons), self.Veq)  # Default resolution = 100
+        self.resolution = self.Vs.shape[0]  # Resolution is now safely set
+
+        # If Ss is not given, assume equilibrium
+        self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
+
+        # Compute deviations from equilibrium
+        self.delta_Vs = self.Vs - self.Veq[None, :]
+        self.delta_Ss = self.Ss - self.Seq[None, :, :]
+
+        # Expand other parameters
         self.gamma_g = self._expand_to_array(gamma_g, (num_neurons, num_neurons))
         self.gamma_s = self._expand_to_array(gamma_s, (num_neurons, num_neurons))
         self.gamma = self._expand_to_array(gamma, num_neurons)
@@ -79,13 +78,6 @@ class LIF:
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:
         """
         Expand a scalar value to an array of the given shape, or validate an existing array.
-
-        Parameters:
-            value (Union[float, np.ndarray]): Input value or array.
-            shape (Tuple[int, ...]): Desired shape of the output array.
-
-        Returns:
-            np.ndarray: Array of the specified shape.
         """
         if np.isscalar(value):
             return np.full(shape, value)

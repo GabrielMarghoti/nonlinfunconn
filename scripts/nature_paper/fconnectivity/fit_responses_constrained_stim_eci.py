@@ -24,7 +24,8 @@ for s in sys.argv[1:]:
 if (matchless_nan_th is not None or matchless_nan_th_from_file) and not sig_green:
     raise ValueError("--matchless-nan-th can only be used with --signal:green")
 
-if not os.path.isdir(folder+"responses/fits/"): os.mkdir(folder+"responses/fits/")
+if not os.path.isdir(folder+"responses/fits/"): 
+    os.makedirs(folder+"responses/fits/")
 
 tubatura = pp.Pipeline("fit_responses_constrained_stim_eci.py",folder=folder)
 tubatura.open_logbook_f()

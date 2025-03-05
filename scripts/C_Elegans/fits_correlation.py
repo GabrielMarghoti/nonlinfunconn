@@ -112,57 +112,6 @@ def load_ds_list(fname,tags=None,exclude_tags=None,return_tags=False):
     else:
         return ds_list
 
-def get_aconnectome_from_file(chem_th=3,gap_th=2,exclude_white=False,
-                                average=False):
-    '''Load the anatomical connectome data from all the sources listed in 
-    the class.
-    
-    Returns
-    -------
-    chem: numpy.ndarray
-        chem[i,j] is the count of chemical synapses from j to i, averaged
-        across the sources.
-    gap: numpy.ndarray
-        gap[i,j] is the count of gap junctions from j to i, averaged
-        across the sources.
-    '''
-    chem = np.zeros((n_neurons, n_neurons))
-    gap = np.zeros((n_neurons, n_neurons))
-        
-    aconn_sources = [#{"type": "white", "fname": "aconnectome.json", "ids_fname":"aconnectome_ids.txt"},
-                     {"type": "whiteA", "fname": "aconnectome_white_1986_whole.csv"},
-                     {"type": "whiteL4", "fname": "aconnectome_white_1986_L4.csv"},
-                     {"type": "witvliet", "fname": "aconnectome_witvliet_2020_7.csv"},
-                     {"type": "witvliet", "fname": "aconnectome_witvliet_2020_8.csv"}
-                     ]
-    
-    sources_used = 0
-    for source in aconn_sources:
-        if source["type"]=="white" and not exclude_white:
-            c, g = self._get_aconnectome_white(
-                                    self.module_folder+source["fname"],
-                                    self.module_folder+source["ids_fname"])
-        elif source["type"] in ["whiteL4","whiteA"] and not exclude_white:
-            c, g = self._get_aconnectome_witvliet(
-                                    self.module_folder+source["fname"])
-        elif source["type"]=="witvliet":
-            c, g = self._get_aconnectome_witvliet(
-                                    self.module_folder+source["fname"])
-        else:
-            continue
-        
-        chem += c
-        gap += g
-        sources_used += 1
-    
-    if average:    
-        chem /= sources_used
-        gap /= sources_used
-    
-    chem[chem<=chem_th] = 0
-    gap[gap<=gap_th] = 0
-        
-    return chem, gap
 
 ds_list, ds_tags = load_ds_list(ds_list_path, return_tags=True)
 ds_list_spont, ds_spont_tags = load_ds_list(ds_list_spont_path, return_tags=True)

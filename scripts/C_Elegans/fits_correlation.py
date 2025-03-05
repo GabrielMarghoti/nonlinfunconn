@@ -124,11 +124,20 @@ funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
                                  verbose=False)
 
 aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
+num_neurons = aconn_chem.shape[0]
 
 print("aconn_chem",aconn_chem.shape)
 print("aconn_elec",aconn_elec.shape)
 print("aconn_chem",aconn_chem)  
 print("aconn_elec",aconn_elec)
+
+############################################################################################################################################
+########### #NEGF kernels
+############################################################################################################################################
+print("NEGF kernels")
+print("num_neurons",num_neurons)
+nonlin_kernel = nlf.negf.LIF(num_neurons =  num_neurons, gamma_g = aconn_elec, gamma_s = aconn_chem)
+
 # Iterate over the folders whcih contains each experiment data
 for (i, folder) in enumerate(ds_list):
 
@@ -316,12 +325,6 @@ for (i, folder) in enumerate(ds_list):
                         "n_branches": len(n_branch_params), 
                         "n_branch_params": n_branch_params}
             fconn.fit_params[ie][neu_j] = params_dict
-
-############################################################################################################################################
-########### #NEGF kernels
-############################################################################################################################################
-
-            nonlin_kernel = nlf.negf.LIF(num_neurons =  aconn_elec.shape[0], gamma_g = aconn_elec, gamma_s = aconn_chem)
 
             if neu_j in responding_original and plot:
                 #print("plotting")

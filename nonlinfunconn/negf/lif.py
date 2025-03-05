@@ -46,7 +46,7 @@ class LIF:
         self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
 
         # If Vs is not given, assume equilibrium
-        self.Vs = Vs if Vs is not None else np.full((100, num_neurons), self.Veq)  # Default resolution = 100
+        self.Vs = Vs if Vs is not None else np.full((10, num_neurons), self.Veq)  # Default resolution = 100
         self.resolution = self.Vs.shape[0]  # Resolution is now safely set
 
         # If Ss is not given, assume equilibrium
@@ -68,12 +68,29 @@ class LIF:
 
         # Initialize Green's function arrays
         self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.gg_0 = np.zeros_like(self.sigma_0)
-        self.gs_0 = np.zeros_like(self.sigma_0)
-        self.g_0 = np.zeros_like(self.sigma_0)
-        self.sigma = np.zeros_like(self.sigma_0)
-        self.pi = np.zeros_like(self.sigma_0)
-        self.g = np.zeros_like(self.sigma_0)
+        self.gg_0    = np.zeros_like(self.sigma_0)
+        self.gs_0    = np.zeros_like(self.sigma_0)
+        self.g_0     = np.zeros_like(self.sigma_0)
+        self.sigma   = np.zeros_like(self.sigma_0)
+        self.pi      = np.zeros_like(self.sigma_0)
+        self.g       = np.zeros_like(self.sigma_0)
+
+        print("LIF model initialized.")
+        print(f"Number of neurons: {num_neurons}")
+        print(f"Time step: {dt}")
+        print(f"Resolution: {self.resolution}")
+        print(f"Equilibrium membrane potential: {self.Veq}")
+        print(f"Equilibrium synaptic state: {self.Seq}")
+        print(f"Membrane potential deviations: {self.delta_Vs}")
+        print(f"Synaptic state deviations: {self.delta_Ss}")
+        print(f"Gamma_g: {self.gamma_g}")
+        print(f"Gamma_s: {self.gamma_s}")
+        print(f"Gamma: {self.gamma}")
+        print(f"Beta: {self.beta}")
+        print(f"Threshold potential: {self.V_th}")
+        print(f"Synaptic reversal potential: {self.Es}")
+        print(f"Synaptic activation steepness (a_r): {self.a_r}")
+        print(f"Synaptic deactivation steepness (a_d): {self.a_d}")
 
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:
         """

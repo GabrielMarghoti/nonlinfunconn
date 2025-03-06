@@ -19,21 +19,41 @@ class LIF:
         self,
         dt: float = 1.0,
         num_neurons: int = None,
-        Veq: Union[float, np.ndarray] = 0.0,
-        Seq: Union[float, np.ndarray] = 0.0,
-        Vs: np.ndarray = None,
-        Ss: np.ndarray = None,  # Synaptic state variable
-        gamma_g: Union[float, np.ndarray] = 10.0,
-        gamma_s: Union[float, np.ndarray] = 10.0,
-        gamma: Union[float, np.ndarray] = 10.0,
-        beta: Union[float, np.ndarray] = 125,
-        V_th: Union[float, np.ndarray] = 0.0,
-        Es: Union[float, np.ndarray] = 0.0,          
-        a_r: Union[float, np.ndarray] = 1.0,
-        a_d: Union[float, np.ndarray] = 5.0,
+        Veq: Union[float, np.ndarray] = 0.0,  # Equilibrium membrane potential
+        Seq: Union[float, np.ndarray] = 0.0,  # Equilibrium synaptic state
+        Vs: np.ndarray = None,  # Membrane potential dynamics (time series)
+        Ss: np.ndarray = None,  # Synaptic state dynamics (time series)
+        gamma_g: Union[float, np.ndarray] = 10.0,  # Conductance decay rate
+        gamma_s: Union[float, np.ndarray] = 10.0,  # Synaptic decay rate
+        gamma: Union[float, np.ndarray] = 10.0,  # Membrane potential decay rate
+        beta: Union[float, np.ndarray] = 125,  # Inverse synaptic timescale
+        V_th: Union[float, np.ndarray] = 0.0,  # Threshold potential for spiking
+        E_c: Union[float, np.ndarray] = 0.0,  # Equilibrium membrane potential
+        E_s: Union[float, np.ndarray] = 0.0,  # Synaptic reversal potential
+        a_r: Union[float, np.ndarray] = 1.0,  # Synaptic rise time constant
+        a_d: Union[float, np.ndarray] = 5.0,  # Synaptic decay time constant
+        C: Union[float, np.ndarray] = 1.0,  # Membrane capacitance
     ):
         """
         Initialize the LIF model.
+
+        Parameters:
+        - dt: Time step for simulation.
+        - num_neurons: Number of neurons in the network.
+        - Veq: Equilibrium membrane potential (scalar or array).
+        - Seq: Equilibrium synaptic state (scalar or array).
+        - Vs: Predefined membrane potential dynamics (or initialized to Veq).
+        - Ss: Predefined synaptic state dynamics (or initialized to Seq).
+        - gamma_g: Conductance decay rate.
+        - gamma_s: Synaptic decay rate.
+        - gamma: Membrane potential decay rate.
+        - beta: Inverse synaptic timescale.
+        - V_th: Neuronal firing threshold.
+        - E_s: Synaptic reversal potential.
+        - E_c: Leakege potential equilibrium potential.
+        - a_r: Synaptic rise time constant.
+        - a_d: Synaptic decay time constant.
+        - C: Membrane capacitance.
         """
         self.dt = dt
         self.num_neurons = num_neurons
@@ -42,38 +62,44 @@ class LIF:
             raise ValueError("num_neurons must be specified.")
 
         # Expand scalar parameters to arrays
-        self.Veq = self._expand_to_array(Veq, num_neurons)
-        self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
+        self.Veq = self._expand_to_array(Veq, num_neurons)  # Equilibrium potential
+        self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))  # Synaptic state equilibrium
 
-        # If Vs is not given, assume equilibrium
-        self.Vs = Vs if Vs is not None else np.full((10, num_neurons), self.Veq)  # Default resolution = 100
-        self.resolution = self.Vs.shape[0]  # Resolution is now safely set
+        # Initialize membrane potential and synaptic state arrays
+        self.Vs = Vs if Vs is not None else np.full((10, num_neurons), self.Veq)  # Default resolution = 10
+        self.resolution = self.Vs.shape[0]  # Resolution determined by Vs shape
 
-        # If Ss is not given, assume equilibrium
         self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
 
-        # Compute deviations from equilibrium
+        # Compute deviations from equilibrium states
         self.delta_Vs = self.Vs - self.Veq[None, :]
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
 
-        # Expand other parameters
+        # Expand parameters for all neurons
+        # Gap junction conductance
         self.gamma_g = self._expand_to_array(gamma_g, (num_neurons, num_neurons))
+
+        # Chemmical synapse parameters
         self.gamma_s = self._expand_to_array(gamma_s, (num_neurons, num_neurons))
-        self.gamma = self._expand_to_array(gamma, num_neurons)
         self.beta = self._expand_to_array(beta, (num_neurons, num_neurons))
         self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
-        self.Es = self._expand_to_array(Es, (num_neurons, num_neurons))
+        self.E_s = self._expand_to_array(E_s, (num_neurons, num_neurons))
         self.a_r = self._expand_to_array(a_r, (num_neurons, num_neurons))
         self.a_d = self._expand_to_array(a_d, (num_neurons, num_neurons))
 
+        # One compartiment model cell parameters
+        self.gamma = self._expand_to_array(gamma, num_neurons)  # Membrane potential decay rate
+        self.E_c = self._expand_to_array(E_c, num_neurons) 
+        self.C = self._expand_to_array(C, num_neurons)  # Capacitance
+
         # Initialize Green's function arrays
         self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.gg_0    = np.zeros_like(self.sigma_0)
-        self.gs_0    = np.zeros_like(self.sigma_0)
-        self.g_0     = np.zeros_like(self.sigma_0)
-        self.sigma   = np.zeros_like(self.sigma_0)
-        self.pi      = np.zeros_like(self.sigma_0)
-        self.g       = np.zeros_like(self.sigma_0)
+        self.gg_0 = np.zeros_like(self.sigma_0)
+        self.gs_0 = np.zeros_like(self.sigma_0)
+        self.g_0 = np.zeros_like(self.sigma_0)
+        self.sigma = np.zeros_like(self.sigma_0)
+        self.pi = np.zeros_like(self.sigma_0)
+        self.g = np.zeros_like(self.sigma_0)
 
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:
         """

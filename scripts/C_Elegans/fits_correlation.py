@@ -27,6 +27,7 @@ matchless_nan_th_added_only = "--matchless-nan-th-added-only" in sys.argv
 merge = "--no-merge" not in sys.argv
 ds_exclude_tags = "mutant" if "--unc31" in sys.argv else None
 
+aconn_ds_i = None # default is loading from funatlas, if aconn_ds_i is set, it will load from the specified dataset
 # default 
 output_folder = "figures/"
 
@@ -39,6 +40,8 @@ for arg in sys.argv:
         matchless_nan_th = float(_arg[1])
     elif _arg[0] == "--folder:":
         output_folder = _arg[1]
+    if _arg[0] == "--aconn-ds-i": 
+        aconn_ds_i=int(_arg[1])
 
 signal_kwargs = {"remove_spikes": True,  "smooth": True, 
                  "smooth_mode": "sg_causal", 

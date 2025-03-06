@@ -75,23 +75,6 @@ class LIF:
         self.pi      = np.zeros_like(self.sigma_0)
         self.g       = np.zeros_like(self.sigma_0)
 
-        print("LIF model initialized.")
-        print(f"Number of neurons: {num_neurons}")
-        print(f"Time step: {dt}")
-        print(f"Resolution: {self.resolution}")
-        print(f"Equilibrium membrane potential: {self.Veq}")
-        print(f"Equilibrium synaptic state: {self.Seq}")
-        print(f"Membrane potential deviations: {self.delta_Vs}")
-        print(f"Synaptic state deviations: {self.delta_Ss}")
-        print(f"Gamma_g: {self.gamma_g}")
-        print(f"Gamma_s: {self.gamma_s}")
-        print(f"Gamma: {self.gamma}")
-        print(f"Beta: {self.beta}")
-        print(f"Threshold potential: {self.V_th}")
-        print(f"Synaptic reversal potential: {self.Es}")
-        print(f"Synaptic activation steepness (a_r): {self.a_r}")
-        print(f"Synaptic deactivation steepness (a_d): {self.a_d}")
-
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:
         """
         Expand a scalar value to an array of the given shape, or validate an existing array.
@@ -148,12 +131,14 @@ class LIF:
         return (beta * exp_term) / (1 + exp_term) ** 2
 
     def compute_equilibrium_green_functions(self,
-        n_neigh_max: int = 2):
+        Vs: np.ndarray = None,
+        Ss: np.ndarray = None, 
+        degree_max: int = 2):
         """
         Compute the equilibrium Green's functions for the LIF network.
 
         Parameter:
-            n_neigh_max (int): Maximum number of neighbors for fitting the effective NEGF for nodes not direct connected.
+            degree_max (int): Maximum number of nodes that compromise a path for signal propagation.
         """
         time_diff = np.arange(self.resolution)[:, None] - np.arange(self.resolution)
         heaviside_diff = self.heaviside(time_diff)

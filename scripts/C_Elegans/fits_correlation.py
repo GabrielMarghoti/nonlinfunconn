@@ -4,11 +4,11 @@
 # inspired by 
 # https://github.com/leiferlab/pumpprobe/tree/main/scripts/fconnectivity/fit_responses_constrained_stim_eci
 # https://github.com/leiferlab/pumpprobe/tree/main/scripts/fconnectivity/figures/compare_connectomes/funatlas_vs_correlations2
-#
+# Kunert et al., PRE 89 052805 (2014) for parameter estimation
 
 import numpy as np
 import matplotlib.pyplot as plt
-import os, sys
+import os, sys, time, json
 import pumpprobe as pp
 import wormdatamodel as wormdm
 import wormbrain as wormb
@@ -127,8 +127,8 @@ aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical c
 num_neurons = aconn_chem.shape[0]
 
 print("aconn_chem",aconn_chem.shape)
-print("aconn_elec",aconn_elec.shape)
 print("aconn_chem",aconn_chem)  
+print("aconn_elec",aconn_elec.shape)
 print("aconn_elec",aconn_elec)
 
 ############################################################################################################################################
@@ -136,7 +136,86 @@ print("aconn_elec",aconn_elec)
 ############################################################################################################################################
 print("NEGF kernels")
 print("num_neurons",num_neurons)
+# Update the kernel parameters based on Kunert C.Elegans model
+
+f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/params.json','r')
+params = json.load(f)
+f.close()
+def get_genetic_prediction():
+    #Downlaod the Excel workbook from the paper
+    import shutil
+    import tempfile
+    import urllib.request
+    url = 'https://doi.org/10.1371/journal.pcbi.1007974.s003'
+    with urllib.request.urlopen(url) as response:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            shutil.copyfileobj(response, tmp_file) #store it in a temporary location
+
+    import pandas as pd
+    WS = pd.read_excel(tmp_file.name, sheet_name='5. Sign prediction')
+    WS_np = np.array(WS)
+
+    # Location of various data within the excel worksheet
+    pre_syn_col = 0
+    post_syn_col = 3
+    pred_col = 16
+
+    first_row = 2
+    last_row = 3639
+
+    pre = WS_np[first_row:last_row, pre_syn_col] #Presynaptic neuron
+    post = WS_np[first_row:last_row, post_syn_col] #postsynaptic neuron
+    sign = WS_np[first_row:last_row, pred_col] #Sign prediction
+    # strip out the 0's from neuron names to match our formatting so that we get VB1 instead of VB01
+    pre = pd.Series(pre).str.replace('0','').to_numpy()
+    post = pd.Series(post).str.replace('0','').to_numpy()
+    return pre, post, sign
+
+pre, post, pred = get_genetic_prediction()
+sign = np.ones((funa.n_neurons,funa.n_neurons))
+for k in np.arange(len(pre)):
+    if pred[k] == "-":
+        aj,ai = funa.ids_to_i([pre[k],post[k]])
+        sign[ai,aj] = -1
+
+# Get the composite aconnectome via the Funatlas
+if aconn_ds_i is None:
+    Gsyn, Ggap = funa.get_aconnectome_from_file(chem_th=0,gap_th=0,exclude_white=False,average=True)
+else:
+    aconn_folder = funa.module_folder
+    aconn_fname = funa.aconn_sources[aconn_ds_i]["fname"]
+    Gsyn, Ggap = funa._get_aconnectome_witvliet(aconn_folder+aconn_fname)
+
+# If non-interacting, set all elements to zero
+if params['interacting'] == 0:
+    Gsyn[:,:] = 0
+    Ggap[:,:] = 0
+
+# Cell
+C = params['C'] # Membrane capacitance [F]
+Gcell = params['Gcell'] # Leakage conductance of membrane [S]
+Ecell = params['Ecell'] # Leakage potential [V]
+
+# Electrical synapses
+ggap = params['ggap'] # conductivity of electrical synapse [Siemens]
+
+# Chemical synapses
+gsyn = params['gsyn'] # "conductivity" of chemical synapse [Siemens]
+ar = params['ar'] # activation rate of synapses [s^-1]
+ad = params['ad'] # deactivation rate of synapses [s^-1]
+beta = params['beta'] # width of synaptic activation [V^-1]
+esynexc = params['esynexc'] # reverse potential for excitatory synapses
+esyninh = params['esyninh'] # reverse potential for inhibitory synapses
+
+# Build the Esyn array of the synaptic reverse potentials
+# The index is presynaptic neuron, which determines the neurotransmitter and
+# hence the sign of the synapse.
+#OLD WITH neurotrans Esyn = 0.5*(Neurotrans+1)*esynexc - 0.5*(Neurotrans-1)*esyninh
+Esyn = np.ones((funa.n_neurons,funa.n_neurons))*esynexc
+Esyn[sign<0] = esyninh
+
 nonlin_kernel = nlf.negf.LIF(num_neurons =  num_neurons, gamma_g = aconn_elec, gamma_s = aconn_chem)
+
 
 # Iterate over the folders whcih contains each experiment data
 for (i, folder) in enumerate(ds_list):

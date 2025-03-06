@@ -126,24 +126,37 @@ funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
                                  ds_tags=ds_tags,ds_exclude_tags=ds_exclude_tags,
                                  verbose=False)
 
-aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
-num_neurons = aconn_chem.shape[0]
+#aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
+#num_neurons = aconn_chem.shape[0]
 
-print("aconn_chem",aconn_chem.shape)
-print("aconn_chem",aconn_chem)  
-print("aconn_elec",aconn_elec.shape)
-print("aconn_elec",aconn_elec)
 
 ############################################################################################################################################
 ########### #NEGF kernels
 ############################################################################################################################################
-print("NEGF kernels")
-print("num_neurons",num_neurons)
-# Update the kernel parameters based on Kunert C.Elegans model
 
+# Find the kernel parameters based on Kunert C.Elegans model
 f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/params.json','r')
 params = json.load(f)
 f.close()
+
+f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/aconnectome.json','r')
+content = json.load(f)
+Neurotrans_ = np.array(content['chemical_sign'])
+f.close()
+f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/neurons.txt','r')
+neu_id_ = []
+for line in f.readlines():
+    ni = line.split("\t")[1]
+    if ni[-1]=="\n": ni=ni[:-1]
+    neu_id_.append(ni)
+f.close()
+
+# Transfer over the neurotransmitter information to the funatlas reference frame
+Neurotrans = np.ones(funa.n_neurons)
+for i_n in np.arange(len(Neurotrans_)):
+    ai = funa.ids_to_i(neu_id_[i_n])
+    Neurotrans[ai] = Neurotrans_[i_n]
+    
 def get_genetic_prediction():
     #Downlaod the Excel workbook from the paper
     import shutil
@@ -189,6 +202,9 @@ else:
     aconn_fname = funa.aconn_sources[aconn_ds_i]["fname"]
     Gsyn, Ggap = funa._get_aconnectome_witvliet(aconn_folder+aconn_fname)
 
+# Number of neurons
+num_neurons = len(Neurotrans)
+
 # If non-interacting, set all elements to zero
 if params['interacting'] == 0:
     Gsyn[:,:] = 0
@@ -213,12 +229,24 @@ esyninh = params['esyninh'] # reverse potential for inhibitory synapses
 # Build the Esyn array of the synaptic reverse potentials
 # The index is presynaptic neuron, which determines the neurotransmitter and
 # hence the sign of the synapse.
-#OLD WITH neurotrans Esyn = 0.5*(Neurotrans+1)*esynexc - 0.5*(Neurotrans-1)*esyninh
 Esyn = np.ones((funa.n_neurons,funa.n_neurons))*esynexc
 Esyn[sign<0] = esyninh
 
-nonlin_kernel = nlf.negf.LIF(num_neurons =  num_neurons, gamma_g = aconn_elec, gamma_s = aconn_chem)
 
+# Initialize the NEGF kernel class
+nonlin_kernel = nlf.negf.LIF(
+        num_neurons = num_neurons,
+        gamma_g = Ggap*ggap, 
+        gamma_s = Gsyn*gsyn, 
+        gamma = Gcell, 
+        C = C,  
+        beta= beta,  
+        E_c = Ecell, 
+        # V_th: Union[float, np.ndarray] = 0.0,   # must set to the equilibrium potential
+        E_s = Esyn, 
+        a_r = ar, 
+        a_d = ad, 
+)
 
 # Iterate over the folders whcih contains each experiment data
 for (i, folder) in enumerate(ds_list):

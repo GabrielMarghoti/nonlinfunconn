@@ -266,22 +266,16 @@ class LIF:
             
         
         G = np.copy(self.g)  # First neighbors (direct)
-        for i in range(self.num_neurons):
-            for j in range(self.num_neurons):
-                if j==i: continue
-                range(gf_order_max):
-                for k in range(self.num_neurons): 
-                    if ((k==j) or (k==i)): continue
-                    G[t, t_prime, i, j] += self.non_translational_conv(self.g[t, t_prime:t, i, k], G[t_prime:t, t_prime, k, j])       
-
-
-
-
-                G[t, t_prime, 3, 1] += convolution(g[t, t_prime:t, 3, 2], G[t_prime:t, t_prime, 2, 1], self.dt, 8)
-                G[t, t_prime, 4, 2] += convolution(g[t, t_prime:t, 4, 3], G[t_prime:t, t_prime, 3, 2], self.dt, 8)
-        for t in range(self.resolution):    # Third neighbors
-            for t_prime in range(t):
-                G[t, t_prime, 4, 1] += convolution(g[t, t_prime:t, 4, 3], G[t_prime:t, t_prime, 3, 1], self.dt, 8)
+        for path_len in range(gf_order_max):
+            for i in range(self.num_neurons):
+                for j in range(self.num_neurons):
+                    if j==i: continue
+                    if (self.gamma_g[i, j]==0 and self.gamma_s[i, j]==0): continue
+                    for k in range(self.num_neurons): 
+                        if ((k==j) or (k==i)): continue
+                        if ((self.gamma_g[i, k]==0 and self.gamma_s[i, k]==0) or (self.gamma_g[k, j]==0 and self.gamma_s[k, j]==0)): continue
+                        G[:, :, i, j] += self.non_translational_conv(self.g[:, :, i, k], G[:, :, k, j])       
+        return G
 
 
     def eval(self,x,dtype=np.float64,drop_branches=None):

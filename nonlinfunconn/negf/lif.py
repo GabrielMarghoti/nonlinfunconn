@@ -127,6 +127,16 @@ class LIF:
         """
         return np.where(t >= 0, 1.0, 0.0)
 
+    def update_V(self,  V: np.ndarray):
+        """
+        Update the membrane potential and synaptic state dynamics.
+
+        Parameters:
+            V (np.ndarray): Membrane potential.
+        """
+        # Compute synaptic activation
+        self.V = V
+    
     def synaptic_activation(self, V: np.ndarray, beta: np.ndarray, V_th: np.ndarray) -> np.ndarray:
         """
         Compute the synaptic activation function.
@@ -156,10 +166,7 @@ class LIF:
         exp_term = np.exp(-beta * (V - V_th))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
-    def compute_equilibrium_green_functions(self,
-        Vs: np.ndarray = None,
-        Ss: np.ndarray = None, 
-        degree_max: int = 2):
+    def compute_direct_negf_eq(self):
         """
         Compute the equilibrium Green's functions for the LIF network.
 
@@ -199,8 +206,10 @@ class LIF:
             for t_prime in range(t):
                 self.g_0[t, t_prime] = self.gg_0[t, t_prime] + convolution(self.gs_0[t, t_prime:t], self.sigma_0[t_prime:t, t_prime], self.dt, 8)
 
-    def compute_nonequilibrium_green_functions(self,
-        n_neigh_max: int = 2):
+    def compute_direct_negf(self,
+        Vs: np.ndarray = None,
+        Ss: np.ndarray = None, 
+        ):
         """
             Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -229,6 +238,53 @@ class LIF:
                                                                    (1 - (self.delta_Vs[t_prime:t, i] / (self.Es[i, j] - self.Veq[i]))) * 
                                                                    self.sigma[t_prime:t, t_prime, i, j], self.dt, 8)
                             self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
+
+
+  
+    def eval(self,x,dtype=np.float64,drop_branches=None):
+        '''Evaluates the NEGFs in the time domain.
+        
+        Parameters
+        ----------
+        x: array_like
+            Time axis. All times should be positive.
+        dtype: type (optional)
+            Type of the output array. Default: np.float64        
+        drop_branches: int or array_like of int
+            Branches to be ignored in the evaluation. Default: None.
+            
+        Returns
+        -------
+        out: numpy.ndarray
+            ExponentialConvolution evaluated on x.
+        '''
+        assert np.all(x>=0)
+        
+        if drop_branches is not None:
+            try: len(drop_branches)
+            except: drop_branches = [drop_branches]
+        
+        out = np.zeros_like(x,dtype=dtype)
+            
+        for exp in self.exp[-1]:
+            # Skip terms that are in excluded branches
+            branch = exp["branch"]
+            if drop_branches is not None:
+                if branch in drop_branches: continue
+                
+            g = exp["g"]
+            factor = exp["factor"]
+            power_t = exp["power_t"]
+            
+            if power_t==0: mult=1.
+            else: mult=np.power(x,power_t)
+            out += factor*mult*np.exp(-g*x)
+            
+        return out
+    
+
+
+
 
 
     @classmethod

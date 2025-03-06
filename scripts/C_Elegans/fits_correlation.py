@@ -211,7 +211,7 @@ if params['interacting'] == 0:
     Ggap[:,:] = 0
 
 # Cell
-C = params['C'] # Membrane capacitance [F]
+Ci = params['C'] # Membrane capacitance [F]
 Gcell = params['Gcell'] # Leakage conductance of membrane [S]
 Ecell = params['Ecell'] # Leakage potential [V]
 
@@ -239,7 +239,7 @@ nonlin_kernel = nlf.negf.LIF(
         gamma_g = Ggap*ggap, 
         gamma_s = Gsyn*gsyn, 
         gamma = Gcell, 
-        C = C,  
+        C = Ci,  
         beta= beta,  
         E_c = Ecell, 
         # V_th: Union[float, np.ndarray] = 0.0,   # must set to the equilibrium potential

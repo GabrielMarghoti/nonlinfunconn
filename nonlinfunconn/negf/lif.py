@@ -250,13 +250,30 @@ class LIF:
                             self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
         return self.g
 
-    def compute_effective_negf(self, dt, resolution,
-        Vs: np.ndarray,
-        
-        iteration_index_MAX = 4,
+    def compute_effective_negf(self,
+        gf_order_max:int = 2,
         ):
-        """
-  
+
+        self.resolution = self.g.shape[0] 
+            
+        
+        G = np.zeros_like(self.g)              # First neighbors (direct)                        
+        for t in range(self.resolution):
+            for t_prime in range(t):
+                G[t, t_prime, 3, 1] += convolution(g[t, t_prime:t, 3, 2], G[t_prime:t, t_prime, 2, 1], self.dt, 8)
+                G[t, t_prime, 4, 2] += convolution(g[t, t_prime:t, 4, 3], G[t_prime:t, t_prime, 3, 2], self.dt, 8)
+        for t in range(self.resolution):    # Third neighbors
+            for t_prime in range(t):
+                G[t, t_prime, 4, 1] += convolution(g[t, t_prime:t, 4, 3], G[t_prime:t, t_prime, 3, 1], self.dt, 8)
+
+    def non_translational_conv(self, K, signal, 
+        dt = None, order):
+        for i in range(N):
+            for t in range(self.resolution):
+                for j=1:N
+                    conv_G_V[t, i] += convolution(g[t, 1:t, i, j], ΔVs[1:t, j], self.dt, 8)
+        
+
     def eval(self,x,dtype=np.float64,drop_branches=None):
         '''Evaluates the NEGFs in the time domain.
         

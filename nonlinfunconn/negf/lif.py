@@ -166,13 +166,16 @@ class LIF:
         exp_term = np.exp(-beta * (V - V_th))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
-    def compute_direct_negf_eq(self):
+    def compute_direct_negf_eq(self, dt, resolution,):
         """
         Compute the equilibrium Green's functions for the LIF network.
 
         Parameter:
             degree_max (int): Maximum number of nodes that compromise a path for signal propagation.
         """
+        self.resolution = resolution
+        self.dt = dt
+
         time_diff = np.arange(self.resolution)[:, None] - np.arange(self.resolution)
         heaviside_diff = self.heaviside(time_diff)
 
@@ -205,10 +208,11 @@ class LIF:
         for t in range(self.resolution):
             for t_prime in range(t):
                 self.g_0[t, t_prime] = self.gg_0[t, t_prime] + convolution(self.gs_0[t, t_prime:t], self.sigma_0[t_prime:t, t_prime], self.dt, 8)
+        return self.g_0
 
-    def compute_direct_negf(self,
+    def compute_direct_negf(self, dt, resolution,
         Vs: np.ndarray = None,
-        Ss: np.ndarray = None, 
+        iteration_index_MAX = 4
         ):
         """
             Compute the nonequilibrium Green's functions for the LIF network.
@@ -216,9 +220,15 @@ class LIF:
             Parameter:
                 n_neigh_max (int): Maximum number of neighbors for fitting the effective NEGF for nodes not direct connected.
         """
-        conv_sigma_V = np.zeros((self.resolution, self.num_neurons, self.num_neurons))
+        self.resolution = resolution
+        self.dt = dt
+        self.Vs = Vs
+        self.delta_Vs = self.Vs - self.Veq[None, :]
 
-        for itr in range(3):  # Iterative approximation
+        self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq) # Initialize synaptic state dynamics for iterative approximation
+        self.delta_Ss = self.Ss - self.Seq[None, :, :]
+
+        for _ in range(iteration_index_MAX):  # Iterative approximation for Neumann series approximation
             for i in range(self.num_neurons):
                 for j in range(self.num_neurons):
                     for t in range(self.resolution):
@@ -229,24 +239,30 @@ class LIF:
                                              self.synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j])) / self.delta_Vs[t, j]
                             self.sigma[t, :, i, j] = (self.sigma_0[t, :, i, j] / 
                                                       self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j]) * 
-                                                      synaptic_diff * (1 - (conv_sigma_V[t, i, j] / (1 - self.Seq[i, j]))))
+                                                      synaptic_diff * (1 - (self.Ss[t, i, j] / (1 - self.Seq[i, j]))))
 
-                        conv_sigma_V[t, i, j] = convolution(self.sigma[t, :t, i, j], self.delta_Vs[:t, j], self.dt, 8)
+                        self.Ss[t, i, j] = convolution(self.sigma[t, :t, i, j], self.delta_Vs[:t, j], self.dt, 8)
 
                         for t_prime in range(t):
                             self.pi[t, t_prime, i, j] = convolution(self.gs_0[t, t_prime:t, i, j], 
                                                                    (1 - (self.delta_Vs[t_prime:t, i] / (self.Es[i, j] - self.Veq[i]))) * 
                                                                    self.sigma[t_prime:t, t_prime, i, j], self.dt, 8)
                             self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
+        return self.g
 
-
+    def compute_effective_negf(self, dt, resolution,
+        Vs: np.ndarray,
+        
+        iteration_index_MAX = 4,
+        ):
+        """
   
     def eval(self,x,dtype=np.float64,drop_branches=None):
         '''Evaluates the NEGFs in the time domain.
         
         Parameters
         ----------
-        x: array_like
+        t: array_like
             Time axis. All times should be positive.
         dtype: type (optional)
             Type of the output array. Default: np.float64        

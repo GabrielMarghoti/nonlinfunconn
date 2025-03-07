@@ -322,7 +322,7 @@ for (i_folder, folder) in enumerate(ds_list):
         responding = responding_original
         n_responding = n_responding_original
         
-        Y = np.zeros(time.shape[0], num_neurons) # store the signal of all neurons in the network
+        Y = np.zeros((time.shape[0], num_neurons)) # store the signal of all neurons in the network
         
         # Get the unconstrained parameters to build a cleaned-up version of the
         # stimulated neuron's activity.
@@ -344,24 +344,6 @@ for (i_folder, folder) in enumerate(ds_list):
         
         stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
         
-        ###############
-        # PREPARE PLOTS
-        ###############
-            
-        nrows = max(1,int(np.sqrt(n_responding_original)))
-        ncols = int(np.sqrt(n_responding_original))+2
-        if plot:
-            print("plotting")
-            try:
-                fig.clear()
-            except:
-                pass
-            fig, ax = plt.subplots(nrows=nrows, ncols=ncols,figsize=(15,10))
-            for a in np.ravel(ax): a.set_xticks([]);a.set_yticks([])
-            if nrows==1: ax = np.array([ax])
-
-
-
         for j in np.arange(n_responding):    
             neu_j = responding[j]
             if neu_j==stim: continue
@@ -416,8 +398,37 @@ for (i_folder, folder) in enumerate(ds_list):
 #        Compute NEGF kernels
 ############################################################################################################
         # Compute the direct NEGF kernel
-        g = nonlin_kernel.compute_direct_negf(Vs=y, dt=fconn.Dt) 
+        g = nonlin_kernel.compute_direct_negf(Vs=Y, dt=fconn.Dt) 
         G = nonlin_kernel.compute_effective_negf(2) #  
+
+        # Plot heatmaps for each neuron pair
+        for i in range(G.shape[2]):
+            plt.figure()
+            plt.imshow(G[:, :, i, ie], aspect='auto', cmap='viridis')
+            plt.colorbar()
+            plt.title(f'Effective NEGF for neuron pair ({i}, {ie})')
+            plt.xlabel('Time')
+            plt.ylabel('Time')
+            plt.savefig(fits_dir + f'negf_effective_neuron_pair_{i}_{ie}.png', bbox_inches='tight')
+            plt.close()
+        ###############
+        # PREPARE PLOTS
+        ###############
+            
+        nrows = max(1,int(np.sqrt(n_responding_original)))
+        ncols = int(np.sqrt(n_responding_original))+2
+        if plot:
+            print("plotting")
+            try:
+                fig.clear()
+            except:
+                pass
+            fig, ax = plt.subplots(nrows=nrows, ncols=ncols,figsize=(15,10))
+            for a in np.ravel(ax): a.set_xticks([]);a.set_yticks([])
+            if nrows==1: ax = np.array([ax])
+
+
+
         for j in np.arange(n_responding):
             neu_j = responding[j]
             if neu_j==stim: continue

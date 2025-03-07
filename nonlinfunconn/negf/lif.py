@@ -226,7 +226,7 @@ class LIF:
         self.resolution = Vs.shape[0]
         self.dt = dt
         self.Vs = Vs
-        self.delta_Vs = self.Vs - self.Veq[None, :]
+        self.delta_Vs = Vs - self.Veq[None, :]
 
         self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq)  # Initialize synaptic state dynamics for iterative approximation
         self.delta_Ss = self.Ss - self.Seq[None, :, :]

@@ -119,6 +119,50 @@ class LIF:
                 raise ValueError(f"Expected shape {shape}, but got {value.shape}")
         else:
             raise TypeError(f"Expected scalar or numpy array, but got {type(value)}")
+        
+
+    def find_equilibrium(self, V0 = 0.0, S0 = None, max_iter=100000, tol=1e-4):
+        """
+        Simulates the LIF model until the system reaches an equilibrium state. Using simple Euler method.
+
+        Parameters:
+        - lif_model: An instance of the LIF class.
+        - max_iter: Maximum number of iterations to run the simulation.
+        - tol: Convergence tolerance for equilibrium detection.
+
+        Returns:
+        - Veq: The equilibrium membrane potential.
+        - Seq: The equilibrium synaptic state.
+        """
+
+        V = V0
+        if S0 is None:
+            S = np.full(V0.shape, 0.0)
+        else:
+            S = S0
+
+        for _ in range(max_iter):
+            # Compute synaptic current
+            I_syn = np.sum(S * (self.E_s - V[:, None]), axis=1)
+            
+            # Update membrane potential using Euler method
+            dV = (-(V - self.E_c) * self.gamma + I_syn) / self.C * 0.01
+            V_new = V + dV
+            
+            # Update synaptic state (first-order kinetic model)
+            dS = (-self.gamma_s * S + self.beta * (1 - S) * np.exp(-self.a_r) - S * np.exp(-self.a_d)) * self.dt
+            S_new = S + dS
+            
+            # Check for convergence
+            if np.max(np.abs(V_new - V)) < tol and np.max(np.abs(S_new - S)) < tol:
+                print("Equilibrium reached.")
+                return V_new, S_new
+            
+            # Update for next iteration
+            V, S = V_new, S_new
+        
+        print("Warning: Equilibrium not reached within max iterations.")
+        return V, S
 
     def heaviside(self, t: np.ndarray) -> np.ndarray:
         """
@@ -251,8 +295,7 @@ class LIF:
 
                     self.pi[:, :, i, j] = nontt_conv(
                         self.gs_0[:, :, i, j], 
-                        (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) * 
-                        self.sigma[:, :, i, j], self.dt
+                        (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) *  self.sigma[:, :, i, j], self.dt
                     )
                     self.g[:, :, i, j] = self.gg_0[:, :, i, j] + self.pi[:, :, i, j]
         

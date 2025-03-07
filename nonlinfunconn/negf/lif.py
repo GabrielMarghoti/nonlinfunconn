@@ -101,6 +101,8 @@ class LIF:
         self.pi = np.zeros_like(self.sigma_0)
         self.g = np.zeros_like(self.sigma_0)
 
+        self.G = np.zeros_like(self.g)      # Effective Green's function
+
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:
         """
         Expand a scalar value to an array of the given shape, or validate an existing array.
@@ -166,7 +168,7 @@ class LIF:
         exp_term = np.exp(-beta * (V - V_th))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
-    def compute_direct_negf_eq(self, dt, resolution,):
+    def compute_direct_negf_eq(self, dt, resolution):
         """
         Compute the equilibrium Green's functions for the LIF network.
 
@@ -204,67 +206,70 @@ class LIF:
         self.gg_0 = heaviside_diff[..., None, None] * self.gamma_g[None, None, ...] * exp_term_gg
         self.gs_0 = heaviside_diff[..., None, None] * self.gamma_s[None, None, ...] * (self.Es[None, None, ...] - self.Veq[None, None, ...]) * exp_term_gg
 
-        # Compute g_0 using convolution
-        for t in range(self.resolution):
-            for t_prime in range(t):
-                self.g_0[t, t_prime] = self.gg_0[t, t_prime] + convolution(self.gs_0[t, t_prime:t], self.sigma_0[t_prime:t, t_prime], self.dt, 8)
+        self.g_0 = self.gg_0 + nontt_conv(self.gs_0, self.sigma_0, self.dt)
         return self.g_0
 
-    def compute_direct_negf(self, dt, resolution,
-        Vs: np.ndarray = None,
-        iteration_index_MAX = 4
-        ):
+    def compute_direct_negf(self, dt, resolution, Vs: np.ndarray = None, iteration_index_MAX=4):
         """
-            Compute the nonequilibrium Green's functions for the LIF network.
+        Compute the nonequilibrium Green's functions for the LIF network.
 
-            Parameter:
-                n_neigh_max (int): Maximum number of neighbors for fitting the effective NEGF for nodes not direct connected.
+        Parameters:
+            dt (float): Time step for simulation.
+            resolution (int): Resolution of the simulation.
+            Vs (np.ndarray): Membrane potential dynamics (time series).
+            iteration_index_MAX (int): Maximum number of iterations for the Neumann series approximation.
         """
         self.resolution = resolution
         self.dt = dt
         self.Vs = Vs
         self.delta_Vs = self.Vs - self.Veq[None, :]
 
-        self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq) # Initialize synaptic state dynamics for iterative approximation
+        self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq)  # Initialize synaptic state dynamics for iterative approximation
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
 
         for _ in range(iteration_index_MAX):  # Iterative approximation for Neumann series approximation
             for i in range(self.num_neurons):
                 for j in range(self.num_neurons):
-                    for t in range(self.resolution):
-                        if self.Vs[t, j] == self.Veq[j]:
-                            self.sigma[t, :, i, j] = 0.0
-                        else:
-                            synaptic_diff = (self.synaptic_activation(self.Vs[t, j], self.beta[i, j], self.V_th[i, j]) - 
-                                             self.synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j])) / self.delta_Vs[t, j]
-                            self.sigma[t, :, i, j] = (self.sigma_0[t, :, i, j] / 
-                                                      self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j]) * 
-                                                      synaptic_diff * (1 - (self.Ss[t, i, j] / (1 - self.Seq[i, j]))))
+                    synaptic_diff = np.zeros_like(self.delta_Vs[:, j])
+                    non_zero_indices = self.delta_Vs[:, j] != 0.0
+                    synaptic_diff[non_zero_indices] = (
+                        self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.V_th[i, j]) - 
+                        self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.V_th[i, j])
+                    )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
 
-                        self.Ss[t, i, j] = convolution(self.sigma[t, :t, i, j], self.delta_Vs[:t, j], self.dt, 8)
+                    self.sigma[:, :, i, j] = (
+                        self.sigma_0[:, :, i, j] / 
+                        self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j]) * 
+                        synaptic_diff * (1 - (self.Ss[:, i, j] / (1 - self.Seq[i, j])))
+                    )
 
-                        for t_prime in range(t):
-                            self.pi[t, t_prime, i, j] = convolution(self.gs_0[t, t_prime:t, i, j], 
-                                                                   (1 - (self.delta_Vs[t_prime:t, i] / (self.Es[i, j] - self.Veq[i]))) * 
-                                                                   self.sigma[t_prime:t, t_prime, i, j], self.dt, 8)
-                            self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
+                    self.Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt, 8)
+
+                    self.pi[:, :, i, j] = nontt_conv(
+                        self.gs_0[:, :, i, j], 
+                        (1 - (self.delta_Vs[None, :, i] / (self.Es[i, j] - self.Veq[i]))) * 
+                        self.sigma[:, :, i, j], self.dt
+                    )
+                    self.g[:, :, i, j] = self.gg_0[:, :, i, j] + self.pi[:, :, i, j]
+        
+        self.G = np.copy(self.g)  # First approximation for effective Green's function
         return self.g
 
-def compute_effective_negf(self, gf_order_max: int = 2):
+def compute_effective_negf(self, max_paths_len: int = 2):
     """
     Computes the effective non-equilibrium Green's function (NEGF) up to a specified order.
 
     Parameters:
-    - gf_order_max: int, maximum order of Green's function iterations
+    - max_paths_len: int, maximum path length for effective green function computation. 1 corresponds to direct paths. 2 corresponds to direct and one indirect path (reaches second neighbors).
 
     Returns:
     - np.ndarray: Effective Green's function matrix
     """
     self.resolution = self.g.shape[0]  # Ensure resolution is set properly
 
-    G = np.copy(self.g)  # First-order Green's function
+    self.G = np.copy(self.g)  # First-order Green's function
 
-    for path_len in range(1, gf_order_max + 1):  # Fix: Starts from 1 for path contributions
+    for path_len in range(2, max_paths_len + 1):  # Fix: Starts from 1 for path contributions
         for i in range(self.num_neurons):
             for j in range(self.num_neurons):
                 if i == j:
@@ -280,9 +285,9 @@ def compute_effective_negf(self, gf_order_max: int = 2):
                         continue  # Ensure path is valid
 
                     # Update Green's function iteratively
-                    G[:, :, i, j] += self.non_translational_conv(self.g[:, :, i, k], G[:, :, k, j])
+                    self.G[:, :, i, j] += nontt_conv(self.g[:, :, i, k], self.G[:, :, k, j])
 
-    return G
+    return self.G
 
 
     def eval(self,x,dtype=np.float64,drop_branches=None):

@@ -101,6 +101,8 @@ class LIF:
         self.pi = np.zeros_like(self.sigma_0)
         self.g = np.zeros_like(self.sigma_0)
 
+        self.g_computed_flag = False
+
         self.G = np.zeros_like(self.g)      # Effective Green's function
 
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:
@@ -209,7 +211,7 @@ class LIF:
         self.g_0 = self.gg_0 + nontt_conv(self.gs_0, self.sigma_0, self.dt)
         return self.g_0
 
-    def compute_direct_negf(self, dt, resolution, Vs: np.ndarray = None, iteration_index_MAX=4):
+    def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=4):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -219,7 +221,9 @@ class LIF:
             Vs (np.ndarray): Membrane potential dynamics (time series).
             iteration_index_MAX (int): Maximum number of iterations for the Neumann series approximation.
         """
-        self.resolution = resolution
+
+        self.g_computed_flag = True
+        self.resolution = Vs.shape[0]
         self.dt = dt
         self.Vs = Vs
         self.delta_Vs = self.Vs - self.Veq[None, :]
@@ -265,6 +269,9 @@ def compute_effective_negf(self, max_paths_len: int = 2):
     Returns:
     - np.ndarray: Effective Green's function matrix
     """
+    if not self.g_computed_flag:
+        raise ValueError("Direct Green's function not computed. Run compute_direct_negf() first.")
+    
     self.resolution = self.g.shape[0]  # Ensure resolution is set properly
 
     self.G = np.copy(self.g)  # First-order Green's function
@@ -285,7 +292,7 @@ def compute_effective_negf(self, max_paths_len: int = 2):
                         continue  # Ensure path is valid
 
                     # Update Green's function iteratively
-                    self.G[:, :, i, j] += nontt_conv(self.g[:, :, i, k], self.G[:, :, k, j])
+                    self.G[:, :, i, j] += nontt_conv(self.g[:, :, i, k], self.G[:, :, k, j], self.dt)
 
     return self.G
 

@@ -1,5 +1,5 @@
 import numpy as np
-from nonlinfunconn import convolution
+from ._convolution import convolution
 
 class nontt_conv(np.ndarray):
     '''

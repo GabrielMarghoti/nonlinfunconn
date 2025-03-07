@@ -303,6 +303,11 @@ for (i, folder) in enumerate(ds_list):
             quit()
             
     tubatura.log("Fitting with n_branches_max = 2")
+
+
+
+    #nonlin_kernel.compute_direct_negf(Vs=y, dt=fconn.Dt) 
+
     for ie in np.arange(fconn.n_stim): 
         i0 = max(0,fconn.i0s[ie])
         i1 = fconn.i1s[ie]
@@ -314,7 +319,7 @@ for (i, folder) in enumerate(ds_list):
         responding_original = fconn.resp_neurons_by_stim[ie]
         n_responding_original = len(responding_original)
         # but fit everything - nope
-        #responding = np.arange(fconn.n_neurons)
+        #responding = np.arange(fconn.n_neurons)  # fit all neurons
         #n_responding = len(responding)
         responding = responding_original
         n_responding = n_responding_original
@@ -407,7 +412,7 @@ for (i, folder) in enumerate(ds_list):
             y = y_plt[shift_vol:i1p]
             #if y.shape[0] == 0: continue
             
-            stim_y = pp.Fconn.eci(x,stim_unc_par)
+            stim_y = pp.Fconn.eci(x,stim_unc_par)    # stim_y is an exponential kernel????????????
                     
             loc_std = sig.get_loc_std(y,4)
             
@@ -416,6 +421,11 @@ for (i, folder) in enumerate(ds_list):
             rms_calc_lim = min(int(30/fconn.Dt),len(x))
             
             n_hops_min = 2
+            plt.plot(x, y, label='input')
+            plt.plot(x, stim_unc_par, label='Stimulus')
+            plt.legend()
+            plt.show()
+
             params_, n_branch_params, _ = fconn.fit_eci_branching(
                             x,y,stim_y,dt=fconn.Dt,
                             n_hops_min=1,n_hops_max=3,
@@ -435,6 +445,7 @@ for (i, folder) in enumerate(ds_list):
                         "n_branches": len(n_branch_params), 
                         "n_branch_params": n_branch_params}
             fconn.fit_params[ie][neu_j] = params_dict
+
 
             if neu_j in responding_original and plot:
                 #print("plotting")

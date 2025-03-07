@@ -249,12 +249,12 @@ nonlin_kernel = nlf.negf.LIF(
 )
 
 # Iterate over the folders whcih contains each experiment data
-for (i, folder) in enumerate(ds_list):
+for (i_folder, folder) in enumerate(ds_list):
 
-    if i>2: break   # remove to process all datasets
-    print("Processing dataset", i, ":", folder)
+    if i_folder>2: break   # remove to process all datasets
+    print("Processing dataset", i_folder, ":", folder)
     # Ensure output directory exists
-    fits_dir = output_folder + "_".join(ds_tags[i]) + "_fits/"
+    fits_dir = output_folder + "_".join(ds_tags[i_folder]) + "_fits/"
     os.makedirs(fits_dir, exist_ok=True)
 
 
@@ -304,18 +304,16 @@ for (i, folder) in enumerate(ds_list):
             
     tubatura.log("Fitting with n_branches_max = 2")
 
-
-
-    #nonlin_kernel.compute_direct_negf(Vs=y, dt=fconn.Dt) 
-
-    for ie in np.arange(fconn.n_stim): 
-        i0 = max(0,fconn.i0s[ie])
-        i1 = fconn.i1s[ie]
-        shift_vol = fconn.shift_vols[ie]
-        time = (np.arange(i1-i0)-shift_vol)*fconn.Dt
+    for ie in np.arange(fconn.n_stim): # stimulation index
+        i0 = max(0,fconn.i0s[ie])  # start of the stimulation
+        i1 = fconn.i1s[ie]         # end of the stimulation
+        shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
+        time = (np.arange(i1-i0)-shift_vol)*fconn.Dt  # Dt is in seconds, convert time steps to  times domain (s)
+        # notice the slice for the signal is based on the stimulated neuron signal only
         
         # Get the indices of the stimulated neuron and of the responding neurons.
         stim = fconn.stim_neurons[ie]
+
         responding_original = fconn.resp_neurons_by_stim[ie]
         n_responding_original = len(responding_original)
         # but fit everything - nope
@@ -324,6 +322,7 @@ for (i, folder) in enumerate(ds_list):
         responding = responding_original
         n_responding = n_responding_original
         
+        Y = np.zeros(time.shape[0], num_neurons) # store the signal of all neurons in the network
         
         # Get the unconstrained parameters to build a cleaned-up version of the
         # stimulated neuron's activity.
@@ -360,8 +359,10 @@ for (i, folder) in enumerate(ds_list):
             fig, ax = plt.subplots(nrows=nrows, ncols=ncols,figsize=(15,10))
             for a in np.ravel(ax): a.set_xticks([]);a.set_yticks([])
             if nrows==1: ax = np.array([ax])
-            
-        for j in np.arange(n_responding):
+
+
+
+        for j in np.arange(n_responding):    
             neu_j = responding[j]
             if neu_j==stim: continue
             
@@ -409,7 +410,20 @@ for (i, folder) in enumerate(ds_list):
             if np.all(np.isinf(y)) or np.all(np.isnan(y)): continue
             y[np.isinf(y)] = y[np.where(np.isinf(y))[0]-1]
             y_plt = y
-            y = y_plt[shift_vol:i1p]
+
+            Y[:,neu_j] = y.copy()
+############################################################################################################        
+#        Compute NEGF kernels
+############################################################################################################
+        # Compute the direct NEGF kernel
+        g = nonlin_kernel.compute_direct_negf(Vs=y, dt=fconn.Dt) 
+        G = nonlin_kernel.compute_effective_negf(2) #  
+        for j in np.arange(n_responding):
+            neu_j = responding[j]
+            if neu_j==stim: continue
+
+            y_plt = Y[:,neu_j]
+            y = Y[:,neu_j][shift_vol:i1p]
             #if y.shape[0] == 0: continue
             
             stim_y = pp.Fconn.eci(x,stim_unc_par)    # stim_y is an exponential kernel????????????

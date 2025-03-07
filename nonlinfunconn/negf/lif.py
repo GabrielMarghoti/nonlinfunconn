@@ -243,8 +243,8 @@ class LIF:
 
                     self.sigma[:, :, i, j] = (
                         self.sigma_0[:, :, i, j] / 
-                        self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j]) * 
-                        synaptic_diff * (1 - (self.Ss[:, i, j] / (1 - self.Seq[i, j])))
+                        self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j])[None, :] * 
+                        synaptic_diff[None, :] * (1 - (self.Ss[None, :, i, j] / (1 - self.Seq[i, j])))
                     )
 
                     self.Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt, 8)

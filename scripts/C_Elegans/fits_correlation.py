@@ -232,22 +232,6 @@ esyninh = params['esyninh'] # reverse potential for inhibitory synapses
 Esyn = np.ones((funa.n_neurons,funa.n_neurons))*esynexc
 Esyn[sign<0] = esyninh
 
-
-# Initialize the NEGF kernel class
-nonlin_kernel = nlf.negf.LIF(
-        num_neurons = num_neurons,
-        gamma_g = Ggap*ggap, 
-        gamma_s = Gsyn*gsyn, 
-        gamma = Gcell, 
-        C = Ci,  
-        beta= beta,  
-        E_c = Ecell, 
-        # V_th: Union[float, np.ndarray] = 0.0,   # must set to the equilibrium potential
-        E_s = Esyn, 
-        a_r = ar, 
-        a_d = ad, 
-)
-
 # Iterate over the folders whcih contains each experiment data
 for (i_folder, folder) in enumerate(ds_list):
 
@@ -398,6 +382,22 @@ for (i_folder, folder) in enumerate(ds_list):
 #        Compute NEGF kernels
 ############################################################################################################
         # Compute the direct NEGF kernel
+        # Initialize the NEGF kernel class
+        nonlin_kernel = nlf.negf.LIF(
+            Vs = Y,  # Membrane potential dynamics (sliced signals)
+            num_neurons = num_neurons,
+            gamma_g = Ggap*ggap, 
+            gamma_s = Gsyn*gsyn, 
+            gamma = Gcell, 
+            C = Ci,  
+            beta= beta,  
+            E_c = Ecell, 
+            # V_th: Union[float, np.ndarray] = 0.0,   # must set to the equilibrium potential
+            E_s = Esyn, 
+            a_r = ar, 
+            a_d = ad, 
+        )
+
         g = nonlin_kernel.compute_direct_negf(Vs=Y, dt=fconn.Dt) 
         G = nonlin_kernel.compute_effective_negf(2) #  
 

@@ -399,8 +399,6 @@ for (i_folder, folder) in enumerate(ds_list):
             a_d = ad, 
         )
 
-        nonlin_kernel.find_equilibrium(Y[0, responding])
-
         g = nonlin_kernel.compute_direct_negf(Vs=Y[:, responding], dt=fconn.Dt) 
         G = nonlin_kernel.compute_effective_negf(g, 2) # until second neighbors
 

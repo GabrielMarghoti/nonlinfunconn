@@ -27,7 +27,7 @@ class LIF:
         gamma_s: Union[float, np.ndarray] = 10.0,  # Synaptic decay rate
         gamma: Union[float, np.ndarray] = 10.0,  # Membrane potential decay rate
         beta: Union[float, np.ndarray] = 125,  # Inverse synaptic timescale
-        V_th: Union[float, np.ndarray] = 0.0,  # Threshold potential for spiking
+        V_th: Union[float, np.ndarray] = None,  # Threshold potential for spiking
         E_c: Union[float, np.ndarray] = 0.0,  # Equilibrium membrane potential
         E_s: Union[float, np.ndarray] = 0.0,  # Synaptic reversal potential
         a_r: Union[float, np.ndarray] = 1.0,  # Synaptic rise time constant
@@ -84,7 +84,7 @@ class LIF:
         self.E_s =    self._expand_to_array(E_s, (num_neurons, num_neurons))
 
         self.beta = self._expand_to_array(beta, (num_neurons, num_neurons))
-        self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
+
         self.a_r = self._expand_to_array(a_r, (num_neurons, num_neurons))
         self.a_d = self._expand_to_array(a_d, (num_neurons, num_neurons))
 
@@ -92,6 +92,14 @@ class LIF:
         self.gamma = self._expand_to_array(gamma, num_neurons)  # Membrane potential decay rate
         self.E_c = self._expand_to_array(E_c, num_neurons) 
         self.C = self._expand_to_array(C, num_neurons)  # Capacitance
+
+        # find V_th as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
+        if V_th is None:
+            _V_th, _ = self.find_equilibrium(np.zeros((num_neurons)))
+            self.V_th     = self._expand_to_array(_V_th, (num_neurons, num_neurons))
+        else:
+            self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
+
 
         # Initialize Green's function arrays
         self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
@@ -108,20 +116,25 @@ class LIF:
 
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:
         """
-        Expand a scalar value to an array of the given shape, or validate an existing array.
+        Expand a scalar value to an array of the given shape, expand 1D arrays to 2D if necessary,
+        or validate an existing array.
         """
         if np.isscalar(value):
             return np.full(shape, value)
         elif isinstance(value, np.ndarray):
             if value.shape == shape:
                 return value
-            else:
-                raise ValueError(f"Expected shape {shape}, but got {value.shape}")
+            elif value.ndim == 1:
+                if shape == (value.shape[0], 1):  # Expand to column vector
+                    return value[:, np.newaxis]
+                elif shape == (1, value.shape[0]):  # Expand to row vector
+                    return value[np.newaxis, :]
+            raise ValueError(f"Expected shape {shape}, but got {value.shape}")
         else:
             raise TypeError(f"Expected scalar or numpy array, but got {type(value)}")
-        
 
-    def find_equilibrium(self, V0 = 0.0, S0 = None, max_iter=100000, tol=1e-4):
+
+    def find_equilibrium(self, V0 = None, S0 = None, max_iter=100000, tol=1e-4):
         """
         Simulates the LIF model until the system reaches an equilibrium state. Using simple Euler method.
 
@@ -134,10 +147,13 @@ class LIF:
         - Veq: The equilibrium membrane potential.
         - Seq: The equilibrium synaptic state.
         """
+        if V0 is None:
+            V = np.full((self.num_neurons),  0.0)
+        else:
+            V = V0
 
-        V = V0
         if S0 is None:
-            S = np.full(V0.shape, 0.0)
+            S = np.full((self.num_neurons), 0.0)
         else:
             S = S0
 

@@ -176,7 +176,16 @@ class LIF:
         # Initialize V and S
         V = np.full((self.num_neurons), 0.8) if V0 is None else V0
         S = np.full((self.num_neurons), 0.2) if S0 is None else S0
-
+        print("C: ", self.C)
+        print("gamma_g: ", self.gamma_g)
+        print("gamma_s: ", self.gamma_s)
+        print("gamma: ", self.gamma)
+        print("beta: ", self.beta)
+        
+        print("E_s: ", self.E_s)
+        print("E_c: ", self.E_c)
+        print("a_r: ", self.a_r)
+        print("a_d: ", self.a_d)
         for _ in range(max_iter):
             # Compute synaptic current
             I_syn = np.sum(S * (self.E_s[:, None] - V[None, :]), axis=0)
@@ -198,7 +207,7 @@ class LIF:
 
             # Update for next iteration
             V, S = V_new, S_new
-
+            
         print("Warning: Equilibrium not reached within max iterations.")
         return V, S
 

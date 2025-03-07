@@ -13,6 +13,8 @@ import pumpprobe as pp
 import wormdatamodel as wormdm
 import wormbrain as wormb
 
+import gc
+
 import nonlinfunconn as nlf # for non-linear kernels
 
 plot = True
@@ -384,33 +386,37 @@ for (i_folder, folder) in enumerate(ds_list):
         # Compute the direct NEGF kernel
         # Initialize the NEGF kernel class
         nonlin_kernel = nlf.negf.LIF(
-            Vs = Y,  # Membrane potential dynamics (sliced signals)
-            num_neurons = num_neurons,
-            gamma_g = Ggap*ggap, 
-            gamma_s = Gsyn*gsyn, 
+            Vs = Y[:, responding],  # Membrane potential dynamics (sliced signals)
+            num_neurons = n_responding,
+            gamma_g = (Ggap*ggap)[responding][:, responding], 
+            gamma_s = (Gsyn*gsyn)[responding][:, responding], 
             gamma = Gcell, 
             C = Ci,  
             beta= beta,  
             E_c = Ecell, 
-            # V_th: Union[float, np.ndarray] = 0.0,   # must set to the equilibrium potential
-            E_s = Esyn, 
+            E_s = Esyn[responding][:, responding], 
             a_r = ar, 
             a_d = ad, 
         )
 
-        g = nonlin_kernel.compute_direct_negf(Vs=Y, dt=fconn.Dt) 
-        G = nonlin_kernel.compute_effective_negf(2) #  
+        g = nonlin_kernel.compute_direct_negf(Vs=Y[:, responding], dt=fconn.Dt) 
+        G = nonlin_kernel.compute_effective_negf(g, 2) # until second neighbors
 
         # Plot heatmaps for each neuron pair
         for i in range(G.shape[2]):
             plt.figure()
-            plt.imshow(G[:, :, i, ie], aspect='auto', cmap='viridis')
+            plt.imshow(G[:, :, i, ie], aspect='auto', cmap='viridis',
+                    extent=[time.min()*fconn.Dt, time.max()*fconn.Dt, time.min()*fconn.Dt, time.max()*fconn.Dt])
             plt.colorbar()
-            plt.title(f'Effective NEGF for neuron pair ({i}, {ie})')
-            plt.xlabel('Time')
-            plt.ylabel('Time')
-            plt.savefig(fits_dir + f'negf_effective_neuron_pair_{i}_{ie}.png', bbox_inches='tight')
+            plt.title(f'Effective NEGF for neuron pair ({responding[i]}, {responding[ie]})')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Time (s)')
+            plt.tight_layout()  # Ensures proper layout
+            plt.savefig(os.path.join(fits_dir, f'negf_effective_neuron_pair_{i}_{ie}.png'), bbox_inches='tight')
             plt.close()
+
+            
+        gc.collect()
         ###############
         # PREPARE PLOTS
         ###############
@@ -446,11 +452,7 @@ for (i_folder, folder) in enumerate(ds_list):
             rms_calc_lim = min(int(30/fconn.Dt),len(x))
             
             n_hops_min = 2
-            plt.plot(x, y, label='input')
-            plt.plot(x, stim_unc_par, label='Stimulus')
-            plt.legend()
-            plt.show()
-
+            
             params_, n_branch_params, _ = fconn.fit_eci_branching(
                             x,y,stim_y,dt=fconn.Dt,
                             n_hops_min=1,n_hops_max=3,

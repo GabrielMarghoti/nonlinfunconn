@@ -81,9 +81,10 @@ class LIF:
 
         # Chemmical synapse parameters
         self.gamma_s = self._expand_to_array(gamma_s, (num_neurons, num_neurons))
+        self.E_s =    self._expand_to_array(E_s, (num_neurons, num_neurons))
+
         self.beta = self._expand_to_array(beta, (num_neurons, num_neurons))
         self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
-        self.E_s = self._expand_to_array(E_s, (num_neurons, num_neurons))
         self.a_r = self._expand_to_array(a_r, (num_neurons, num_neurons))
         self.a_d = self._expand_to_array(a_d, (num_neurons, num_neurons))
 
@@ -240,18 +241,17 @@ class LIF:
                         self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.V_th[i, j]) - 
                         self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.V_th[i, j])
                     )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
-
                     self.sigma[:, :, i, j] = (
                         self.sigma_0[:, :, i, j] / 
-                        self.d_synaptic_activation(self.Veq[j], self.beta[i, j], self.V_th[i, j])[None, :] * 
+                        self.d_synaptic_activation(self.Veq[j]*np.ones((self.resolution)), self.beta[i, j], self.V_th[i, j])[None, :] * 
                         synaptic_diff[None, :] * (1 - (self.Ss[None, :, i, j] / (1 - self.Seq[i, j])))
                     )
 
-                    self.Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt, 8)
+                    self.Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
 
                     self.pi[:, :, i, j] = nontt_conv(
                         self.gs_0[:, :, i, j], 
-                        (1 - (self.delta_Vs[None, :, i] / (self.Es[i, j] - self.Veq[i]))) * 
+                        (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) * 
                         self.sigma[:, :, i, j], self.dt
                     )
                     self.g[:, :, i, j] = self.gg_0[:, :, i, j] + self.pi[:, :, i, j]
@@ -259,140 +259,137 @@ class LIF:
         self.G = np.copy(self.g)  # First approximation for effective Green's function
         return self.g
 
-def compute_effective_negf(self, g, max_paths_len: int = 2):
-    """
-    Computes the effective non-equilibrium Green's function (NEGF) up to a specified order.
+    def compute_effective_negf(self, g, max_paths_len: int = 2):
+        """
+        Computes the effective non-equilibrium Green's function (NEGF) up to a specified order.
 
-    Parameters:
-    - max_paths_len: int, maximum path length for effective green function computation. 1 corresponds to direct paths. 2 corresponds to direct and one indirect path (reaches second neighbors).
+        Parameters:
+        - max_paths_len: int, maximum path length for effective green function computation. 1 corresponds to direct paths. 2 corresponds to direct and one indirect path (reaches second neighbors).
 
-    Returns:
-    - np.ndarray: Effective Green's function matrix
-    """
-    resolution = g.shape[0]  # Ensure resolution is set properly
+        Returns:
+        - np.ndarray: Effective Green's function matrix
+        """
+        resolution = g.shape[0]  # Ensure resolution is set properly
 
-    G = np.copy(g)  # First-order Green's function
+        G = np.copy(g)  # First-order Green's function
 
-    for path_len in range(2, max_paths_len + 1):  # Fix: Starts from 1 for path contributions
-        for i in range(self.num_neurons):
-            for j in range(self.num_neurons):
-                if i == j:
-                    continue  # Skip self-connections
-                if g[:, :, i, j] == 0:
-                    continue  # Skip if no interaction
+        for path_len in range(2, max_paths_len + 1):  # Ensure this aligns with expected logic
+            for i in range(self.num_neurons):
+                for j in range(self.num_neurons):
+                    if i == j or np.all(g[:, :, i, j] == 0):
+                        continue  # Skip self-connections and no-interaction pairs
+                    
+                    for k in range(self.num_neurons):
+                        if k in (i, j) or np.all(g[:, :, i, k] == 0) or np.all(g[:, :, k, j] == 0):
+                            continue  # Skip invalid paths
+                        
+                        # Iterative update of Green's function
+                        G[:, :, i, j] += nontt_conv(g[:, :, i, k], G[:, :, k, j])
+
+
+        return G
+
+
+    def eval(self, x, dtype=np.float64, drop_branches=None):
+        """
+        Evaluates the NEGFs in the time domain.
+
+        Parameters:
+        - x: array_like, Time axis. All times should be positive.
+        - dtype: type (optional), Type of the output array. Default: np.float64        
+        - drop_branches: int or array_like of int, Branches to be ignored in the evaluation. Default: None.
                 
-                for k in range(self.num_neurons):
-                    if k == j or k == i:
-                        continue  # Avoid self-loops
-                    if g[:, :, i, k] == 0 or g[:, :, k, j] == 0:
-                        continue  # Ensure path is valid
-
-                    # Update Green's function iteratively
-                    G[:, :, i, j] += nontt_conv(g[:, :, i, k], G[:, :, k, j])
-
-    return G
-
-
-def eval(self, x, dtype=np.float64, drop_branches=None):
-    """
-    Evaluates the NEGFs in the time domain.
-
-    Parameters:
-    - x: array_like, Time axis. All times should be positive.
-    - dtype: type (optional), Type of the output array. Default: np.float64        
-    - drop_branches: int or array_like of int, Branches to be ignored in the evaluation. Default: None.
+        Returns:
+        - np.ndarray: ExponentialConvolution evaluated on x.
+        """
+        assert np.all(x >= 0)
             
-    Returns:
-    - np.ndarray: ExponentialConvolution evaluated on x.
-    """
-    assert np.all(x >= 0)
-        
-    if drop_branches is not None:
-        try:
-            len(drop_branches)
-        except:
-            drop_branches = [drop_branches]
-        
-    out = np.zeros_like(x, dtype=dtype)
+        if drop_branches is not None:
+            try:
+                len(drop_branches)
+            except:
+                drop_branches = [drop_branches]
             
-    for exp in self.exp[-1]:
-        # Skip terms that are in excluded branches
-        branch = exp["branch"]
-        if drop_branches is not None and branch in drop_branches:
-            continue
+        out = np.zeros_like(x, dtype=dtype)
                 
-        g = exp["g"]
-        factor = exp["factor"]
-        power_t = exp["power_t"]
-            
-        if power_t == 0:
-            mult = 1.0
-        else:
-            mult = np.power(x, power_t)
-        out += factor * mult * np.exp(-g * x)
-            
-    return out
-
-
-@classmethod
-def fit(
-    cls,
-    signal: np.ndarray,
-    dt: float,
-    n_neigh_max: int = 2,
-    rms_limits: Optional[Tuple[int, int]] = None,
-    auto_stop: bool = False,
-    rms_tol: float = 1e-2,
-    method: Optional[str] = None,
-    routine: str = "least_squares",
-    p0: Optional[np.ndarray] = None
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Fit the LIF model to the given signal.
-
-    Parameters:
-    - signal (np.ndarray): Signal to fit (shape: [resolution, num_neurons]).
-    - dt (float): Time step.
-    - n_neigh_max (int): Maximum number of neighbors for fitting.
-    - rms_limits (Optional[Tuple[int, int]]): Time limits for RMS calculation.
-    - auto_stop (bool): Whether to stop fitting early if RMS improvement is below tolerance.
-    - rms_tol (float): Tolerance for early stopping.
-    - method (Optional[str]): Optimization method for `scipy.optimize`.
-    - routine (str): Optimization routine ("minimize" or "least_squares").
-
-    Returns:
-    - Tuple[np.ndarray, np.ndarray, np.ndarray]: Fitted parameters, branch parameters, and residuals.
-    """
+        for exp in self.exp[-1]:
+            # Skip terms that are in excluded branches
+            branch = exp["branch"]
+            if drop_branches is not None and branch in drop_branches:
+                continue
+                    
+            g = exp["g"]
+            factor = exp["factor"]
+            power_t = exp["power_t"]
                 
-    num_neurons = signal.shape[1]
-    resolution = signal.shape[0]
+            if power_t == 0:
+                mult = 1.0
+            else:
+                mult = np.power(x, power_t)
+            out += factor * mult * np.exp(-g * x)
+                
+        return out
 
-    Veq = np.mean(signal, axis=0)
-    Seq = np.zeros((num_neurons, num_neurons))
-    Vs = np.zeros((resolution, num_neurons))
-    delta_Vs = np.zeros_like(Vs)
-    delta_Ss = np.zeros((resolution, num_neurons, num_neurons))
-    gamma_g = np.zeros((num_neurons, num_neurons))
-    gamma_s = np.zeros_like(gamma_g)
-    gamma = np.zeros(num_neurons)
-    beta = np.zeros_like(gamma_g)
-    V_th = np.zeros_like(gamma_g)
-    Es = np.zeros_like(gamma_g)
-    a_r = np.zeros_like(gamma_g)
-    a_d = np.zeros_like(gamma_g)
 
-    lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d)
-    lif.compute_equilibrium_green_functions()
-    lif.compute_nonequilibrium_green_functions()
+    @classmethod
+    def fit(
+        cls,
+        signal: np.ndarray,
+        dt: float,
+        n_neigh_max: int = 2,
+        rms_limits: Optional[Tuple[int, int]] = None,
+        auto_stop: bool = False,
+        rms_tol: float = 1e-2,
+        method: Optional[str] = None,
+        routine: str = "least_squares",
+        p0: Optional[np.ndarray] = None
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Fit the LIF model to the given signal.
 
-    if p0 is None:
-        p0 = np.random.rand(num_neurons)
+        Parameters:
+        - signal (np.ndarray): Signal to fit (shape: [resolution, num_neurons]).
+        - dt (float): Time step.
+        - n_neigh_max (int): Maximum number of neighbors for fitting.
+        - rms_limits (Optional[Tuple[int, int]]): Time limits for RMS calculation.
+        - auto_stop (bool): Whether to stop fitting early if RMS improvement is below tolerance.
+        - rms_tol (float): Tolerance for early stopping.
+        - method (Optional[str]): Optimization method for `scipy.optimize`.
+        - routine (str): Optimization routine ("minimize" or "least_squares").
 
-    if routine == "minimize":
-        error = lambda p, x, y: np.sum(np.power(convolution(x, cls.eci(x, p), dt, 8) - y, 2))
-        res = minimize(error, p0, args=(signal, signal), method=method)
-    elif routine == "least_squares":
-        residuals = lambda p, x, y: convolution(x, cls.eci(x, p), dt, 8) - y
-        res = least_squares(residuals, p0, args=(signal, signal), method=method)
+        Returns:
+        - Tuple[np.ndarray, np.ndarray, np.ndarray]: Fitted parameters, branch parameters, and residuals.
+        """
+                    
+        num_neurons = signal.shape[1]
+        resolution = signal.shape[0]
 
-    return res.x, None, None
+        Veq = np.mean(signal, axis=0)
+        Seq = np.zeros((num_neurons, num_neurons))
+        Vs = np.zeros((resolution, num_neurons))
+        delta_Vs = np.zeros_like(Vs)
+        delta_Ss = np.zeros((resolution, num_neurons, num_neurons))
+        gamma_g = np.zeros((num_neurons, num_neurons))
+        gamma_s = np.zeros_like(gamma_g)
+        gamma = np.zeros(num_neurons)
+        beta = np.zeros_like(gamma_g)
+        V_th = np.zeros_like(gamma_g)
+        Es = np.zeros_like(gamma_g)
+        a_r = np.zeros_like(gamma_g)
+        a_d = np.zeros_like(gamma_g)
+
+        lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d)
+        lif.compute_equilibrium_green_functions()
+        lif.compute_nonequilibrium_green_functions()
+
+        if p0 is None:
+            p0 = np.random.rand(num_neurons)
+
+        if routine == "minimize":
+            error = lambda p, x, y: np.sum(np.power(convolution(x, cls.eci(x, p), dt, 8) - y, 2))
+            res = minimize(error, p0, args=(signal, signal), method=method)
+        elif routine == "least_squares":
+            residuals = lambda p, x, y: convolution(x, cls.eci(x, p), dt, 8) - y
+            res = least_squares(residuals, p0, args=(signal, signal), method=method)
+
+        return res.x, None, None

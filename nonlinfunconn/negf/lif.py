@@ -95,7 +95,7 @@ class LIF:
 
         # find V_th as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
         if V_th is None:
-            _V_th, _ = self.find_equilibrium(np.zeros((num_neurons)))
+            _V_th, _ = self.kunert_eq()#self.find_equilibrium(np.zeros((num_neurons)))
             self.V_th     = self._expand_to_array(_V_th, (num_neurons, num_neurons))
         else:
             self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
@@ -147,6 +147,53 @@ class LIF:
             raise ValueError(
                 f"1D array length {value.shape[0]} does not match either dimension of the target shape {shape}"
             )
+        
+    def Veq(self, V, S):
+        """
+        Calculate the equilibrium membrane potential.
+        
+        Parameters:
+        - V: 1D array of membrane potentials.
+        - S: 1D array of synaptic activations.
+        
+        Returns:
+        - Y: 1D array of updated membrane potentials.
+        """
+        VV = np.repeat([V], V.shape[0], axis=0)  # Ensure VV is correctly shaped
+        
+        Y = self.E_c \
+            - np.sum(self.gamma_s * S / self.gamma * (VV.T - self.E_s), axis=1) \
+            - np.sum(self.gamma_g / self.gamma * (VV.T - V[None, :]), axis=1)
+        
+        return Y
+
+    def kunert_eq(self, maxit=100000, damp=1e-3, tol=5e-5):
+        """
+        Find equilibrium values as in Kunert paper simulation.
+        
+        Parameters:
+        - maxit: Maximum number of iterations (default: 100000).
+        - damp: Damping factor for convergence stabilization (default: 1e-3).
+        - tol: Convergence tolerance (default: 5e-5).
+        
+        Returns:
+        - V: 1D array of resting membrane potentials.
+        - Seq: 1D array of synaptic activations at rest.
+        """
+        Seq = 0.5 * self.a_r / (0.5 * self.a_r + self.a_d)  # Closed-form solution
+        V = self.E_c.copy()
+        
+        for i in range(maxit):
+            Vold = np.copy(V)
+            V = (Vold + damp * self.Veq(Vold, Seq)) / (1. + damp)
+            dV = np.sum(np.abs((V - Vold) / Vold))
+            
+            if dV < tol:
+                break
+        else:
+            print(f"Warning: Maximum iterations ({maxit}) reached without convergence.")
+        
+        return V, Seq
             
     def find_equilibrium(self, V0=None, S0=None, max_iter=10000, tol=1e-4, dt=0.01):
         """

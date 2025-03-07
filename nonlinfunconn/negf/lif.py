@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize, least_squares
 from typing import Optional, Tuple, Union
 from nonlinfunconn import convolution
-from ..utils.irrarray import irrarray
+from ..utils.nontt_conv import  nontt_conv
 
 import numpy as np
 from typing import Union, Tuple
@@ -249,29 +249,6 @@ class LIF:
                                                                    self.sigma[t_prime:t, t_prime, i, j], self.dt, 8)
                             self.g[t, t_prime, i, j] = self.gg_0[t, t_prime, i, j] + self.pi[t, t_prime, i, j]
         return self.g
-
-def non_translational_conv(self, K1, K2, dt=None):
-    """
-    Computes a non-translational convolution between two kernel matrices.
-
-    Parameters:
-    - K1: np.ndarray, first kernel matrix
-    - K2: np.ndarray, second kernel matrix
-    - dt: float, optional time step (defaults to self.dt)
-
-    Returns:
-    - np.ndarray: Output convolution matrix
-    """
-    if dt is None:
-        dt = self.dt
-
-    out = np.zeros_like(K1)  # Fix: Should be based on K1, not self.K1
-
-    for t in range(self.resolution):
-        for t_prime in range(t):  # Fix: Prevents accessing out-of-bounds indices
-            out[t, t_prime] = convolution(K1[t, t_prime:t], K2[t_prime:t, t_prime], dt, 8)  # Fix slicing
-    return out
-
 
 def compute_effective_negf(self, gf_order_max: int = 2):
     """

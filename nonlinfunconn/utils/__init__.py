@@ -4,3 +4,4 @@ from ._integration import integral
 from .integration import integral as integral_py
 
 from .irrarray import irrarray
+from .nontt_conv import nontt_conv

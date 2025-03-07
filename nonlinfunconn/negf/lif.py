@@ -147,52 +147,58 @@ class LIF:
             raise ValueError(
                 f"1D array length {value.shape[0]} does not match either dimension of the target shape {shape}"
             )
-
-        raise ValueError(f"Expected shape {shape}, but got {value.shape}")
-
-    def find_equilibrium(self, V0 = None, S0 = None, max_iter=100000, tol=1e-4):
+            
+    def find_equilibrium(self, V0=None, S0=None, max_iter=10000, tol=1e-4, dt=0.01):
         """
-        Simulates the LIF model until the system reaches an equilibrium state. Using simple Euler method.
+        Simulates the LIF model until the system reaches an equilibrium state using the Euler method.
 
         Parameters:
-        - lif_model: An instance of the LIF class.
+        - V0: Initial membrane potential (optional). If None, defaults to zeros.
+        - S0: Initial synaptic state (optional). If None, defaults to zeros.
         - max_iter: Maximum number of iterations to run the simulation.
         - tol: Convergence tolerance for equilibrium detection.
+        - dt: Time step for the Euler method (default: 0.01).
 
         Returns:
         - Veq: The equilibrium membrane potential.
         - Seq: The equilibrium synaptic state.
-        """
-        if V0 is None:
-            V = np.full((self.num_neurons),  0.0)
-        else:
-            V = V0
+        - status: A boolean flag indicating whether equilibrium was reached.
 
-        if S0 is None:
-            S = np.full((self.num_neurons), 0.0)
-        else:
-            S = S0
+        Raises:
+        - ValueError: If V0 or S0 have incorrect shapes.
+        """
+        # Validate input shapes
+        if V0 is not None and V0.shape != (self.num_neurons,):
+            raise ValueError(f"V0 must have shape ({self.num_neurons},), but got {V0.shape}")
+        if S0 is not None and S0.shape != (self.num_neurons,):
+            raise ValueError(f"S0 must have shape ({self.num_neurons},), but got {S0.shape}")
+
+        # Initialize V and S
+        V = np.full((self.num_neurons), 0.8) if V0 is None else V0
+        S = np.full((self.num_neurons), 0.2) if S0 is None else S0
 
         for _ in range(max_iter):
             # Compute synaptic current
-            I_syn = np.sum(S * (self.E_s - V[:, None]), axis=1)
-            
+            I_syn = np.sum(S * (self.E_s[:, None] - V[None, :]), axis=0)
+
             # Update membrane potential using Euler method
-            dV = (-(V - self.E_c) * self.gamma + I_syn) / self.C * 0.01
-            V_new = V + dV
-            
+            dV = (-(V - self.E_c) * self.gamma + I_syn) / self.C * dt
+            V_new = np.clip(V + dV, -1e6, 1e6)  # Clip V_new to reasonable bounds
+
             # Update synaptic state (first-order kinetic model)
-            dS = (-self.gamma_s * S + self.beta * (1 - S) * np.exp(-self.a_r) - S * np.exp(-self.a_d)) * self.dt
-            S_new = S + dS
-            
+            dS = (-self.gamma_s * S + self.beta * (1 - S) * np.exp(-self.a_r) - S * np.exp(-self.a_d)) * dt
+            S_new = np.clip(S + dS, 0, 1)       # Clip S_new to [0, 1] if it represents a probability
+
             # Check for convergence
-            if np.max(np.abs(V_new - V)) < tol and np.max(np.abs(S_new - S)) < tol:
+            diff_V = np.linalg.norm(V_new - V) / np.linalg.norm(V)
+            diff_S = np.linalg.norm(S_new - S) / np.linalg.norm(S)
+            if diff_V < tol and diff_S < tol:
                 print("Equilibrium reached.")
                 return V_new, S_new
-            
+
             # Update for next iteration
             V, S = V_new, S_new
-        
+
         print("Warning: Equilibrium not reached within max iterations.")
         return V, S
 

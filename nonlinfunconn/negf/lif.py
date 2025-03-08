@@ -348,7 +348,37 @@ class LIF:
         self.gg_0 = heaviside_diff[..., None, None] * self.gamma_g[None, None, ...] * exp_term_gg
         self.gs_0 = heaviside_diff[..., None, None] * self.gamma_s[None, None, ...] * (self.E_s[None, None, ...] - self.Veq[None, None, ...]) * exp_term_gg
 
-        self.g_0 = self.gg_0 + nontt_conv(self.gs_0, self.sigma_0, self.dt)
+        self.g_0 = self.gg_0 + convolution(self.gs_0, self.sigma_0, self.dt, 8)
+        return self.g_0
+    
+    def compute_direct_equilibrium_green_functions(self, dt=None, resolution=None):
+        if dt is None:
+            dt = self.dt
+        
+        t_s = np.arange(0, resolution * dt, dt)  # Time vector
+
+        # Precompute repeated values outside loops where possible
+        gamma_sum = self.gamma[:, np.newaxis] + np.sum(self.gamma_g, axis=1)[:, np.newaxis] + np.sum(self.gamma_s * self.Seq, axis=1)[:, np.newaxis]
+
+        for i in range(self.num_neurons):
+            for j in range(self.num_neurons):
+                a_r, a_d, beta, Veq, V_th = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.V_th[i, j]
+                heaviside_func = self.heaviside(t_s[:, np.newaxis] - t_s)
+
+                # Compute common factors
+                exp_factor_synaptic = np.exp(-(t_s[:, np.newaxis] - t_s) * (a_d - a_r / (1 + np.exp(-beta * (Veq - V_th)))))
+                synaptic_factor = a_r * (1 - self.Seq[i, j]) * self.d_synaptic_activation(Veq, beta, V_th)
+
+                exp_factor_gs_gg = np.exp(-(t_s[:, np.newaxis] - t_s) * gamma_sum[i])
+
+                # Fill tensors
+                self.sigma_0[:, :, i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
+                self.gg_0[:, :, i, j] = heaviside_func * self.gamma_g[i, j] * exp_factor_gs_gg
+                self.gs_0[:, :, i, j] = heaviside_func * self.gamma_s[i, j] * (self.E_s[i, j] - self.Veq[i]) * exp_factor_gs_gg
+
+                # Compute final Green's function
+                self.g_0[:, :, i, j] = self.gg_0[:, :, i, j] + nontt_conv(self.gs_0[:, :, i, j], self.sigma_0[:, :, i, j], dt)
+
         return self.g_0
 
     def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=4):
@@ -369,7 +399,7 @@ class LIF:
         self.Vs = Vs
         self.delta_Vs = Vs - self.Veq[None, :]
 
-        if self.g_eq_computed_flag==False: self.compute_direct_negf_eq(dt=dt, resolution=self.resolution)
+        if self.g_eq_computed_flag==False: _ = self.compute_direct_equilibrium_green_functions(dt=dt, resolution=self.resolution)
 
         self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq)  # Initialize synaptic state dynamics for iterative approximation
         self.delta_Ss = self.Ss - self.Seq[None, :, :]

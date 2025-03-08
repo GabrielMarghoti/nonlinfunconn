@@ -94,11 +94,10 @@ class LIF:
         self.C = self._expand_to_array(C, num_neurons)  # Capacitance
 
         # find V_th as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
+        self.Veq, self.Seq = self.kunert_eq()#self.find_equilibrium(np.zeros((num_neurons)))
         if V_th is None:
-            _V_th, _ = self.kunert_eq()#self.find_equilibrium(np.zeros((num_neurons)))
-            self.V_th     = self._expand_to_array(_V_th, (num_neurons, num_neurons))
-        else:
-            self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
+            V_th = self.Veq
+        self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
 
         # Initialize Green's function arrays
         self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
@@ -110,6 +109,7 @@ class LIF:
         self.g = np.zeros_like(self.sigma_0)
 
         self.g_computed_flag = False
+        self.g_eq_computed_flag = False
 
         self.G = np.zeros_like(self.g)      # Effective Green's function
 
@@ -148,7 +148,7 @@ class LIF:
                 f"1D array length {value.shape[0]} does not match either dimension of the target shape {shape}"
             )
         
-    def Veq(self, V, S):
+    def Veq_step(self, V, S):
         """
         Calculate the equilibrium membrane potential.
         
@@ -185,7 +185,7 @@ class LIF:
         
         for i in range(maxit):
             Vold = np.copy(V)
-            V = (Vold + damp * self.Veq(Vold, Seq)) / (1. + damp)
+            V = (Vold + damp * self.Veq_step(Vold, Seq)) / (1. + damp)
             dV = np.sum(np.abs((V - Vold) / Vold))
             
             if dV < tol:
@@ -316,6 +316,7 @@ class LIF:
         Parameter:
             degree_max (int): Maximum number of nodes that compromise a path for signal propagation.
         """
+        self.g_eq_computed_flag = True
         self.resolution = resolution
         self.dt = dt
 
@@ -345,7 +346,7 @@ class LIF:
                         np.sum(self.gamma_s[None, None, ...] * self.Seq[None, None, ...], axis=-1)))
 
         self.gg_0 = heaviside_diff[..., None, None] * self.gamma_g[None, None, ...] * exp_term_gg
-        self.gs_0 = heaviside_diff[..., None, None] * self.gamma_s[None, None, ...] * (self.Es[None, None, ...] - self.Veq[None, None, ...]) * exp_term_gg
+        self.gs_0 = heaviside_diff[..., None, None] * self.gamma_s[None, None, ...] * (self.E_s[None, None, ...] - self.Veq[None, None, ...]) * exp_term_gg
 
         self.g_0 = self.gg_0 + nontt_conv(self.gs_0, self.sigma_0, self.dt)
         return self.g_0
@@ -361,11 +362,14 @@ class LIF:
             iteration_index_MAX (int): Maximum number of iterations for the Neumann series approximation.
         """
 
+
         self.g_computed_flag = True
         self.resolution = Vs.shape[0]
         self.dt = dt
         self.Vs = Vs
         self.delta_Vs = Vs - self.Veq[None, :]
+
+        if self.g_eq_computed_flag==False: self.compute_direct_negf_eq(dt=dt, resolution=self.resolution)
 
         self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq)  # Initialize synaptic state dynamics for iterative approximation
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
@@ -406,7 +410,6 @@ class LIF:
         Returns:
         - np.ndarray: Effective Green's function matrix
         """
-        resolution = g.shape[0]  # Ensure resolution is set properly
 
         G = np.copy(g)  # First-order Green's function
 
@@ -511,11 +514,11 @@ class LIF:
         gamma = np.zeros(num_neurons)
         beta = np.zeros_like(gamma_g)
         V_th = np.zeros_like(gamma_g)
-        Es = np.zeros_like(gamma_g)
+        E_s = np.zeros_like(gamma_g)
         a_r = np.zeros_like(gamma_g)
         a_d = np.zeros_like(gamma_g)
 
-        lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, Es, a_r, a_d)
+        lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, E_s, a_r, a_d)
         lif.compute_equilibrium_green_functions()
         lif.compute_nonequilibrium_green_functions()
 

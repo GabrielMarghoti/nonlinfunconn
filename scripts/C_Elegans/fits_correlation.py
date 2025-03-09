@@ -392,7 +392,7 @@ for (i_folder, folder) in enumerate(ds_list):
             num_neurons = n_responding,
             gamma_g = (Ggap*ggap/Ci)[responding][:, responding], 
             gamma_s = (Gsyn*gsyn/Ci)[responding][:, responding], 
-            gamma = Gcell, 
+            gamma = Gcell/Ci, 
             C = Ci,  
             beta= beta,  
             E_c = Ecell, 

@@ -98,6 +98,8 @@ class LIF:
         if V_th is None:
             V_th = self.Veq
         self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
+        print('self.Veq: ', self.Veq)
+        print('self.Seq: ', self.Seq)
 
         # Initialize Green's function arrays
         self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))

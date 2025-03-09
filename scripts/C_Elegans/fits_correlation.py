@@ -208,9 +208,9 @@ else:
 num_neurons = len(Neurotrans)
 
 # If non-interacting, set all elements to zero
-if params['interacting'] == 0:
-    Gsyn[:,:] = 0
-    Ggap[:,:] = 0
+#if params['interacting'] == 0:
+#    Gsyn[:,:] = 0
+#    Ggap[:,:] = 0
 
 # Cell
 Ci = params['C'] # Membrane capacitance [F]
@@ -300,13 +300,13 @@ for (i_folder, folder) in enumerate(ds_list):
         # Get the indices of the stimulated neuron and of the responding neurons.
         stim = fconn.stim_neurons[ie]
 
-        responding_original = fconn.resp_neurons_by_stim[ie]
+        responding_original =  fconn.resp_neurons_by_stim[ie]
         n_responding_original = len(responding_original)
+        responding = responding_original
+        n_responding = n_responding_original
         # but fit everything - nope
         #responding = np.arange(fconn.n_neurons)  # fit all neurons
         #n_responding = len(responding)
-        responding = responding_original
-        n_responding = n_responding_original
         
         Y = np.zeros((time.shape[0], num_neurons)) # store the signal of all neurons in the network
         
@@ -331,8 +331,9 @@ for (i_folder, folder) in enumerate(ds_list):
         stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
         
         for j in np.arange(n_responding):    
+            
             neu_j = responding[j]
-            if neu_j==stim: continue
+            #if neu_j==stim: continue  # get segment of stimulated neuron
             
             # Skip the following checks on i1 and simply fit on the time axis
             # before the next stimulus. This also avoids fits of the next response.
@@ -380,6 +381,7 @@ for (i_folder, folder) in enumerate(ds_list):
             y_plt = y
 
             Y[:,neu_j] = y.copy()
+
 ############################################################################################################        
 #        Compute NEGF kernels
 ############################################################################################################
@@ -398,25 +400,32 @@ for (i_folder, folder) in enumerate(ds_list):
             a_r = ar, 
             a_d = ad, 
         )
-
+        # print(((Ggap*ggap)[responding][:, responding]))
         g = nonlin_kernel.compute_direct_negf(Vs=Y[:, responding], dt=fconn.Dt) 
         G = nonlin_kernel.compute_effective_negf(g, 2) # until second neighbors
 
         # Plot heatmaps for each neuron pair
-        for i in range(G.shape[2]):
-            plt.figure()
-            plt.imshow(G[:, :, i, ie], aspect='auto', cmap='viridis',
-                    extent=[time.min()*fconn.Dt, time.max()*fconn.Dt, time.min()*fconn.Dt, time.max()*fconn.Dt])
-            plt.colorbar()
-            plt.title(f'Effective NEGF for neuron pair ({responding[i]}, {responding[ie]})')
-            plt.xlabel('Time (s)')
-            plt.ylabel('Time (s)')
-            plt.tight_layout()  # Ensures proper layout
-            plt.savefig(os.path.join(fits_dir, f'negf_effective_neuron_pair_{i}_{ie}.png'), bbox_inches='tight')
-            plt.close()
+        for i in range(n_responding):
+            for j in range(n_responding):
+                if np.all(G[:, :, i, j] == 0.0): continue
+                plt.figure()
+                plt.imshow(G[:, :, i, j], aspect='auto', cmap='viridis',
+                    extent=[time.min(), time.max(), time.min(), time.max()])
+                plt.colorbar()
+                plt.title(f'Effective NEGF for neuron pair ({responding[i]}, {responding[j]})')
+                plt.xlabel('t (s)')  # Axis 0 is t
+                plt.ylabel('t’ (s)')  # Axis 1 is t'
+                plt.tight_layout()  # Ensures proper layout
+                plt.savefig(os.path.join(fits_dir, f'negf_effective_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'), bbox_inches='tight')
+                plt.close()
 
             
         gc.collect()
+
+
+
+
+
         ###############
         # PREPARE PLOTS
         ###############

@@ -98,9 +98,7 @@ class LIF:
         if V_th is None:
             V_th = self.Veq
         self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
-        print('self.Veq: ', self.Veq)
-        print('self.Seq: ', self.Seq)
-
+        
         # Initialize Green's function arrays
         self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
         self.gg_0 = np.zeros_like(self.sigma_0)
@@ -152,7 +150,7 @@ class LIF:
         
     def Veq_step(self, V, S):
         """
-        Calculate the equilibrium membrane potential.
+        Resting membrane potentials, to be calculated self-consistently
         
         Parameters:
         - V: 1D array of membrane potentials.
@@ -225,16 +223,7 @@ class LIF:
         # Initialize V and S
         V = np.full((self.num_neurons), 0.8) if V0 is None else V0
         S = np.full((self.num_neurons), 0.2) if S0 is None else S0
-        print("C: ", self.C)
-        print("gamma_g: ", self.gamma_g)
-        print("gamma_s: ", self.gamma_s)
-        print("gamma: ", self.gamma)
-        print("beta: ", self.beta)
         
-        print("E_s: ", self.E_s)
-        print("E_c: ", self.E_c)
-        print("a_r: ", self.a_r)
-        print("a_d: ", self.a_d)
         for _ in range(max_iter):
             # Compute synaptic current
             I_syn = np.sum(S * (self.E_s[:, None] - V[None, :]), axis=0)

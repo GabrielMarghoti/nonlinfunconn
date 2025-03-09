@@ -390,8 +390,8 @@ for (i_folder, folder) in enumerate(ds_list):
         nonlin_kernel = nlf.negf.LIF(
             Vs = Y[:, responding],  # Membrane potential dynamics (sliced signals)
             num_neurons = n_responding,
-            gamma_g = (Ggap*ggap)[responding][:, responding], 
-            gamma_s = (Gsyn*gsyn)[responding][:, responding], 
+            gamma_g = (Ggap*ggap/Ci)[responding][:, responding], 
+            gamma_s = (Gsyn*gsyn/Ci)[responding][:, responding], 
             gamma = Gcell, 
             C = Ci,  
             beta= beta,  
@@ -400,7 +400,7 @@ for (i_folder, folder) in enumerate(ds_list):
             a_r = ar, 
             a_d = ad, 
         )
-        # print(((Ggap*ggap)[responding][:, responding]))
+        
         g = nonlin_kernel.compute_direct_negf(Vs=Y[:, responding], dt=fconn.Dt) 
         G = nonlin_kernel.compute_effective_negf(g, 2) # until second neighbors
 

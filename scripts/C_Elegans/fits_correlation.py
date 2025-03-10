@@ -15,7 +15,7 @@ import wormbrain as wormb
 
 import gc
 
-import nonlinfunconn as nlf # for non-linear kernels
+import nonlinfunconn as nlfc # for non-linear kernels
 
 plot = True
 
@@ -269,7 +269,7 @@ for (i_folder, folder) in enumerate(ds_list):
     # Smooth and calculate the derivative of the signal (derivative needed for
     # detection of responses)
     sig.remove_spikes()
-    #sig.median_filter()
+    sig.median_filter()
     sig.smooth(n=127,i=None,poly=7,mode="sg")
 
     # Get the neurons coordinates of the reference volume and load the matches
@@ -391,7 +391,7 @@ for (i_folder, folder) in enumerate(ds_list):
 ############################################################################################################
         # Compute the direct NEGF kernel
         # Initialize the NEGF kernel class
-        nonlin_kernel = nlf.negf.LIF(
+        nonlin_kernel = nlfc.negf.LIF(
             Vs = Y[:, responding],  # Membrane potential dynamics (sliced signals)
             num_neurons = n_responding,
             gamma_g = (Ggap*ggap/Ci)[responding][:, responding], 
@@ -414,18 +414,9 @@ for (i_folder, folder) in enumerate(ds_list):
         for i in range(n_responding):
             for j in range(n_responding):
                 if np.all(G[:, :, i, j] == 0.0) : continue
-                plt.figure()
-                plt.imshow(G[:, :, i, j], aspect='auto', cmap='viridis',
-                    extent=[time.min(), time.max(), time.min(), time.max()])
-                plt.colorbar()
-                plt.title(f'Effective NEGF for neuron pair ({responding[i]}, {responding[j]})')
-                plt.xlabel('t (s)')  # Axis 0 is t
-                plt.ylabel('t’ (s)')  # Axis 1 is t'
-                plt.tight_layout()  # Ensures proper layout
-                plt.savefig(os.path.join(fits_dir, f'negf_effective_neuron_pair_{i}_{stim}_stimulation_{str(ie)}.png'), bbox_inches='tight')
-                plt.close()
+                nlfc.utils.plots.t_t_heatmap(time, G[:, :, i, j], os.path.join(fits_dir, f'negf_G_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                nlfc.utils.plots.time_level_curves(time, G[:, :, i, j], os.path.join(fits_dir, f'negf_G_level_curves_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
 
-            
         gc.collect()
 
 

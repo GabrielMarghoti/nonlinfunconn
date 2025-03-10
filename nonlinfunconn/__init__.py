@@ -4,6 +4,6 @@ from .utils import convolution1, convolution, slice_test
 from .utils import irrarray, nontt_conv
 from .ExponentialConvolution import ExponentialConvolution
 from .negf import LIF
-from .utils.plots import plot_level_curves
+from .utils.plots import t_t_heatmap, time_level_curves
 
-__all__ = ['nontt_conv', 'irrarray', 'ExponentialConvolution', 'convolution', 'integral', 'integral_py', 'LIF', 'plot_level_curves']
+__all__ = ['nontt_conv', 'irrarray', 'ExponentialConvolution', 'convolution', 'integral', 'integral_py', 'LIF', 'time_level_curves', 't_t_heatmap']

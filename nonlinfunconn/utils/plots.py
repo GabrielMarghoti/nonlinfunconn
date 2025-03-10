@@ -8,12 +8,12 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 
 def time_level_curves(time, G, save_path):
-    plt.figure(figsize=(5, 4), dpi=200)
+    plt.figure(figsize=(6, 4), dpi=200)
     
     plt.plot(time[-1] - time[:], G[-1, :], label="G₀", color='black', linewidth=2.4)
     
     # Corrected selection of probe times
-    probe_times_idx = np.linspace(0, len(time) - 1, num=12, dtype=int)
+    probe_times_idx = np.linspace(0, len(time) - 1, num=16, dtype=int)
 
     for t_idx in probe_times_idx:
         color = to_rgba((t_idx /len(time), 0, 1 - (2 * t_idx / len(time) - 1) ** 2, 1))
@@ -21,13 +21,15 @@ def time_level_curves(time, G, save_path):
                  label=f"t = {round(time[t_idx], 2)}",
                  color=color, alpha=0.9, linewidth=1.4, linestyle='solid')
     
-    plt.xlabel("t - t′")
+    plt.xlabel("t - t′ (s)")
     plt.ylabel("G")
-    plt.legend()
+     # Legend at top-right, outside the plot
+    plt.legend(bbox_to_anchor=(1, 1), loc='upper left', borderaxespad=0.)
+
     plt.grid(False)
     plt.box(True)
     
-    plt.savefig(save_path)
+    plt.savefig(save_path, bbox_inches='tight')
     plt.close()
 
 def t_t_heatmap(time, G, save_path):

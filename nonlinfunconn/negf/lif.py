@@ -20,8 +20,8 @@ class LIF:
         t_s: np.ndarray = None,
         dt: float = 1.0,
         num_neurons: int = None,
-        Veq: Union[float, np.ndarray] = 0.0,  # Equilibrium membrane potential
-        Seq: Union[float, np.ndarray] = 0.0,  # Equilibrium synaptic state
+        Veq: Union[float, np.ndarray] = None,  # Equilibrium membrane potential
+        Seq: Union[float, np.ndarray] = None,  # Equilibrium synaptic state
         Vs: np.ndarray = None,  # Membrane potential dynamics (time series)
         Ss: np.ndarray = None,  # Synaptic state dynamics (time series)
         gamma_g: Union[float, np.ndarray] = 10.0,  # Conductance decay rate
@@ -62,10 +62,6 @@ class LIF:
         if self.num_neurons is None:
             raise ValueError("num_neurons must be specified.")
 
-        # Expand scalar parameters to arrays
-        self.Veq = self._expand_to_array(Veq, num_neurons)  # Equilibrium potential
-        self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))  # Synaptic state equilibrium
-
         # Initialize membrane potential and synaptic state arrays
         self.Vs = Vs if Vs is not None else np.full((10, num_neurons), self.Veq)  # Default resolution = 10
         self.resolution = self.Vs.shape[0]  # Resolution determined by Vs shape
@@ -74,12 +70,6 @@ class LIF:
             self.t_s = np.arange(0, self.resolution * self.dt, self.dt)
         else:
             self.t_s = t_s
-
-        self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
-
-        # Compute deviations from equilibrium states
-        self.delta_Vs = self.Vs - self.Veq[None, :]
-        self.delta_Ss = self.Ss - self.Seq[None, :, :]
 
         # Expand parameters for all neurons
         # Gap junction conductance
@@ -100,11 +90,27 @@ class LIF:
         self.C = self._expand_to_array(C, num_neurons)  # Capacitance
 
         # find V_th as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
-        self.Veq, self.Seq = self.kunert_eq()#self.find_equilibrium(np.zeros((num_neurons)))
+        _Veq, _Seq = self.kunert_eq()#self.find_equilibrium(np.zeros((num_neurons)))
         if V_th is None:
-            V_th = self.Veq
+            V_th = _Veq
         self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
+
+        if np.all(Veq == None):
+            self.Veq = _Veq
+        else:
+            self.Veq = Veq
         
+        if np.all(Seq == None):
+            self.Seq = _Seq
+        else:
+            self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
+
+        self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
+
+        # Compute deviations from equilibrium states
+        self.delta_Vs = self.Vs - self.Veq[None, :]
+        self.delta_Ss = self.Ss - self.Seq[None, :, :]
+
         # Initialize Green's function arrays
         self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
         self.gg_0 = np.zeros_like(self.sigma_0)
@@ -201,6 +207,7 @@ class LIF:
         
         return V, Seq
             
+    # old
     def find_equilibrium(self, V0=None, S0=None, max_iter=10000, tol=1e-4, dt=0.01):
         """
         Simulates the LIF model until the system reaches an equilibrium state using the Euler method.
@@ -337,7 +344,7 @@ class LIF:
 
         return self.g_0
 
-    def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=4):
+    def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=5):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -364,7 +371,7 @@ class LIF:
             for j in range(self.num_neurons):
                 if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
                 synaptic_diff = np.zeros_like(self.delta_Vs[:, j])
-                non_zero_indices = self.delta_Vs[:, j] != 0.0
+                non_zero_indices = np.abs(self.delta_Vs[:, j]) >= 0.0001
                 synaptic_diff[non_zero_indices] = (
                     self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.V_th[i, j]) - 
                     self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.V_th[i, j])
@@ -374,10 +381,10 @@ class LIF:
                     self.sigma[:, :, i, j] = (
                         self.sigma_0[:, :, i, j] / 
                         self.d_synaptic_activation(self.Veq[j]*np.ones((self.resolution)), self.beta[i, j], self.V_th[i, j])[None, :] * 
-                        synaptic_diff[None, :] * (1 - (self.Ss[None, :, i, j] / (1 - self.Seq[i, j])))
+                        synaptic_diff[None, :] * (1 - (self.delta_Ss[None, :, i, j] / (1 - self.Seq[i, j])))
                     )
 
-                    self.Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
+                    self.delta_Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
 
                 self.pi[:, :, i, j] = nontt_conv(
                     self.gs_0[:, :, i, j], 

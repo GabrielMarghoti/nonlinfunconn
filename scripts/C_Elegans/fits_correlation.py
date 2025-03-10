@@ -215,7 +215,7 @@ num_neurons = len(Neurotrans)
 # Cell
 Ci = params['C'] # Membrane capacitance [F]
 
-Ci = Ci*200  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast
+#Ci = Ci*200  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast
 
 
 Gcell = params['Gcell'] # Leakage conductance of membrane [S]
@@ -269,8 +269,8 @@ for (i_folder, folder) in enumerate(ds_list):
     # Smooth and calculate the derivative of the signal (derivative needed for
     # detection of responses)
     sig.remove_spikes()
-    sig.median_filter()
-    sig.smooth(n=127,i=None,poly=7,mode="sg")
+    #sig.median_filter()
+    sig.smooth(n=50,i=None,poly=3,mode="sg")
 
     # Get the neurons coordinates of the reference volume and load the matches
     # to determine what neuron was targeted
@@ -366,16 +366,16 @@ for (i_folder, folder) in enumerate(ds_list):
             # baselines due to ongoing dynamics in the shift_vol segment.
             if ie>0:
                 if neu_j in fconn.resp_neurons_by_stim[ie-1]:
-                    y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                    y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=False,
                                         baseline_mode="constant",
                                         baseline_range=[shift_vol-4,shift_vol])[:,neu_j]#, FIXME FIXME FIXME
                                         #normalize="none")[:,neu_j]
                 else:
-                    y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                    y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=False,
                                         baseline_mode="constant")[:,neu_j]#, FIXME FIXME FIXME
                                         #normalize="none")[:,neu_j]
             else:
-                y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=False,
                                         baseline_mode="constant")[:,neu_j]#, FIXME FIXME FIXME
                                         #normalize="none")[:,neu_j]
             
@@ -404,18 +404,26 @@ for (i_folder, folder) in enumerate(ds_list):
             a_r = ar, 
             a_d = ad, 
             dt = fconn.Dt,
-            t_s=time
+            t_s=time,
+            Veq= Y[0, responding]
         )
         
+        G_degree = 2
         g = nonlin_kernel.compute_direct_negf(Vs=Y[:, responding], dt=fconn.Dt) 
-        G = nonlin_kernel.compute_effective_negf(g, 2) # until second neighbors
+        G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
+        # Plot heatmaps for each neuron pair
+        for i in range(n_responding):
+            for j in range(n_responding):
+                if np.all(g[:, :, i, j] == 0.0) : continue
+                #nlfc.utils.plots.t_t_heatmap(time, G[:, :, i, j], os.path.join(fits_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                nlfc.utils.plots.time_level_curves(time, g[:, :, i, j], os.path.join(fits_dir, f'negf_direct_g_level_curves_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
 
         # Plot heatmaps for each neuron pair
         for i in range(n_responding):
             for j in range(n_responding):
                 if np.all(G[:, :, i, j] == 0.0) : continue
-                nlfc.utils.plots.t_t_heatmap(time, G[:, :, i, j], os.path.join(fits_dir, f'negf_G_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time, G[:, :, i, j], os.path.join(fits_dir, f'negf_G_level_curves_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                #nlfc.utils.plots.t_t_heatmap(time, G[:, :, i, j], os.path.join(fits_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                nlfc.utils.plots.time_level_curves(time, G[:, :, i, j], os.path.join(fits_dir, f'negf_G{G_degree}_level_curves_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
 
         gc.collect()
 

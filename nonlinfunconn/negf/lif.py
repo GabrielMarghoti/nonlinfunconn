@@ -17,6 +17,7 @@ class LIF:
 
     def __init__(
         self,
+        t_s: np.ndarray = None,
         dt: float = 1.0,
         num_neurons: int = None,
         Veq: Union[float, np.ndarray] = 0.0,  # Equilibrium membrane potential
@@ -68,6 +69,11 @@ class LIF:
         # Initialize membrane potential and synaptic state arrays
         self.Vs = Vs if Vs is not None else np.full((10, num_neurons), self.Veq)  # Default resolution = 10
         self.resolution = self.Vs.shape[0]  # Resolution determined by Vs shape
+
+        if t_s is None:
+            self.t_s = np.arange(0, self.resolution * self.dt, self.dt)
+        else:
+            self.t_s = t_s
 
         self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
 
@@ -300,75 +306,34 @@ class LIF:
         exp_term = np.exp(-beta * (V - V_th))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
-    def compute_direct_negf_eq(self, dt, resolution):
-        """
-        Compute the equilibrium Green's functions for the LIF network.
-
-        Parameter:
-            degree_max (int): Maximum number of nodes that compromise a path for signal propagation.
-        """
-        self.g_eq_computed_flag = True
-        self.resolution = resolution
-        self.dt = dt
-
-        time_diff = np.arange(self.resolution)[:, None] - np.arange(self.resolution)
-        heaviside_diff = self.heaviside(time_diff)
-
-        # Vectorized computation of exp_term
-        exp_term = np.exp(-time_diff[..., None, None] * 
-                          (self.a_d[None, None, ...] - 
-                           self.a_r[None, None, ...] / 
-                           (1 + np.exp(-self.beta[None, None, ...] * 
-                            (self.Veq[None, None, ...] - self.V_th[None, None, ...])))))
-
-        # Compute sigma_0
-        self.sigma_0 = (heaviside_diff[..., None, None] * 
-                        self.a_r[None, None, ...] * 
-                        (1 - self.Seq[None, None, ...]) * 
-                        self.d_synaptic_activation(self.Veq[None, None, ...], 
-                                                  self.beta[None, None, ...], 
-                                                  self.V_th[None, None, ...]) * 
-                        exp_term)
-
-        # Compute gg_0 and gs_0
-        exp_term_gg = np.exp(-time_diff[..., None, None] * 
-                       (self.gamma[None, None, ...] + 
-                        np.sum(self.gamma_g[None, None, ...], axis=-1) + 
-                        np.sum(self.gamma_s[None, None, ...] * self.Seq[None, None, ...], axis=-1)))
-
-        self.gg_0 = heaviside_diff[..., None, None] * self.gamma_g[None, None, ...] * exp_term_gg
-        self.gs_0 = heaviside_diff[..., None, None] * self.gamma_s[None, None, ...] * (self.E_s[None, None, ...] - self.Veq[None, None, ...]) * exp_term_gg
-
-        self.g_0 = self.gg_0 + convolution(self.gs_0, self.sigma_0, self.dt, 8)
-        return self.g_0
-    
-    def compute_direct_equilibrium_green_functions(self, dt=None, resolution=None):
-        if dt is None:
-            dt = self.dt
-        
-        t_s = np.arange(0, resolution * dt, dt)  # Time vector
-
+    def compute_direct_equilibrium_green_functions(self):
+        self.g_eq_computed_flag==True
         # Precompute repeated values outside loops where possible
         gamma_sum = self.gamma[:, np.newaxis] + np.sum(self.gamma_g, axis=1)[:, np.newaxis] + np.sum(self.gamma_s * self.Seq, axis=1)[:, np.newaxis]
-
+        
         for i in range(self.num_neurons):
+            if gamma_sum[i] == self.gamma[i] : continue    # not connected node 
             for j in range(self.num_neurons):
-                a_r, a_d, beta, Veq, V_th = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.V_th[i, j]
-                heaviside_func = self.heaviside(t_s[:, np.newaxis] - t_s)
 
+                if i == j : continue    # not consider self interaction 
+                if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
+
+                a_r, a_d, beta, Veq, V_th = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.V_th[i, j]
+                heaviside_func = self.heaviside((self.t_s -self.t_s[np.newaxis, :]))
+                
                 # Compute common factors
-                exp_factor_synaptic = np.exp(-(t_s[:, np.newaxis] - t_s) * (a_d - a_r / (1 + np.exp(-beta * (Veq - V_th)))))
+                exp_factor_synaptic = np.exp(-((self.t_s -self.t_s[np.newaxis, :])) * (a_d - a_r / (1 + np.exp(-beta * (Veq - V_th)))))
                 synaptic_factor = a_r * (1 - self.Seq[i, j]) * self.d_synaptic_activation(Veq, beta, V_th)
 
-                exp_factor_gs_gg = np.exp(-(t_s[:, np.newaxis] - t_s) * gamma_sum[i])
+                exp_factor_gs_gg = np.exp(-((self.t_s -self.t_s[np.newaxis, :])) * gamma_sum[i])
 
-                # Fill tensors
                 self.sigma_0[:, :, i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
                 self.gg_0[:, :, i, j] = heaviside_func * self.gamma_g[i, j] * exp_factor_gs_gg
                 self.gs_0[:, :, i, j] = heaviside_func * self.gamma_s[i, j] * (self.E_s[i, j] - self.Veq[i]) * exp_factor_gs_gg
 
                 # Compute final Green's function
-                self.g_0[:, :, i, j] = self.gg_0[:, :, i, j] + nontt_conv(self.gs_0[:, :, i, j], self.sigma_0[:, :, i, j], dt)
+                conv_s = nontt_conv(self.gs_0[:, :, i, j], self.sigma_0[:, :, i, j], self.dt)
+                self.g_0[:, :, i, j] = self.gg_0[:, :, i, j] + conv_s
 
         return self.g_0
 
@@ -390,20 +355,22 @@ class LIF:
         self.Vs = Vs
         self.delta_Vs = Vs - self.Veq[None, :]
 
-        if self.g_eq_computed_flag==False: _ = self.compute_direct_equilibrium_green_functions(dt=dt, resolution=self.resolution)
+        if self.g_eq_computed_flag==False: _ = self.compute_direct_equilibrium_green_functions()
 
         self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq)  # Initialize synaptic state dynamics for iterative approximation
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
 
-        for _ in range(iteration_index_MAX):  # Iterative approximation for Neumann series approximation
-            for i in range(self.num_neurons):
-                for j in range(self.num_neurons):
-                    synaptic_diff = np.zeros_like(self.delta_Vs[:, j])
-                    non_zero_indices = self.delta_Vs[:, j] != 0.0
-                    synaptic_diff[non_zero_indices] = (
-                        self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.V_th[i, j]) - 
-                        self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.V_th[i, j])
-                    )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
+        for i in range(self.num_neurons):
+            for j in range(self.num_neurons):
+                if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
+                synaptic_diff = np.zeros_like(self.delta_Vs[:, j])
+                non_zero_indices = self.delta_Vs[:, j] != 0.0
+                synaptic_diff[non_zero_indices] = (
+                    self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.V_th[i, j]) - 
+                    self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.V_th[i, j])
+                )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
+
+                for _ in range(iteration_index_MAX):  # Iterative approximation for self consistent series approximation
                     self.sigma[:, :, i, j] = (
                         self.sigma_0[:, :, i, j] / 
                         self.d_synaptic_activation(self.Veq[j]*np.ones((self.resolution)), self.beta[i, j], self.V_th[i, j])[None, :] * 
@@ -412,12 +379,24 @@ class LIF:
 
                     self.Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
 
-                    self.pi[:, :, i, j] = nontt_conv(
-                        self.gs_0[:, :, i, j], 
-                        (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) *  self.sigma[:, :, i, j], self.dt
-                    )
-                    self.g[:, :, i, j] = self.gg_0[:, :, i, j] + self.pi[:, :, i, j]
-        
+                self.pi[:, :, i, j] = nontt_conv(
+                    self.gs_0[:, :, i, j], 
+                    (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) *  self.sigma[:, :, i, j], self.dt
+                )
+                self.g[:, :, i, j] = self.gg_0[:, :, i, j] + self.pi[:, :, i, j]
+
+                """ # for debbuging/testing
+                import matplotlib.pyplot as plt
+                
+                plt.plot(self.t_s[-1] - self.t_s, self.g[-1, :, i, j])
+                plt.xlabel('Time')
+                plt.ylabel('Green\'s Function')
+                plt.title(f'Green\'s Function for Neurons {i} and {j}')
+                plt.show()
+                """
+
+
+
         self.G = np.copy(self.g)  # First approximation for effective Green's function
         return self.g
 

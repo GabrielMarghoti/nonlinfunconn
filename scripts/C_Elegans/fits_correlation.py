@@ -214,6 +214,10 @@ num_neurons = len(Neurotrans)
 
 # Cell
 Ci = params['C'] # Membrane capacitance [F]
+
+Ci = Ci*200  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast
+
+
 Gcell = params['Gcell'] # Leakage conductance of membrane [S]
 Ecell = params['Ecell'] # Leakage potential [V]
 
@@ -399,6 +403,8 @@ for (i_folder, folder) in enumerate(ds_list):
             E_s = Esyn[responding][:, responding], 
             a_r = ar, 
             a_d = ad, 
+            dt = fconn.Dt,
+            t_s=time
         )
         
         g = nonlin_kernel.compute_direct_negf(Vs=Y[:, responding], dt=fconn.Dt) 
@@ -407,7 +413,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # Plot heatmaps for each neuron pair
         for i in range(n_responding):
             for j in range(n_responding):
-                if np.all(G[:, :, i, j] == 0.0) or responding[j] != stim : continue
+                if np.all(G[:, :, i, j] == 0.0) : continue
                 plt.figure()
                 plt.imshow(G[:, :, i, j], aspect='auto', cmap='viridis',
                     extent=[time.min(), time.max(), time.min(), time.max()])

@@ -266,7 +266,7 @@ for (i_folder, folder) in enumerate(ds_list):
     # detection of responses)
     sig.remove_spikes()
     #sig.median_filter()
-    #sig.smooth(n=127,i=None,poly=7,mode="sg")
+    sig.smooth(n=127,i=None,poly=7,mode="sg")
 
     # Get the neurons coordinates of the reference volume and load the matches
     # to determine what neuron was targeted
@@ -407,7 +407,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # Plot heatmaps for each neuron pair
         for i in range(n_responding):
             for j in range(n_responding):
-                if np.all(G[:, :, i, j] == 0.0): continue
+                if np.all(G[:, :, i, j] == 0.0) or responding[j] != stim : continue
                 plt.figure()
                 plt.imshow(G[:, :, i, j], aspect='auto', cmap='viridis',
                     extent=[time.min(), time.max(), time.min(), time.max()])
@@ -416,7 +416,7 @@ for (i_folder, folder) in enumerate(ds_list):
                 plt.xlabel('t (s)')  # Axis 0 is t
                 plt.ylabel('t’ (s)')  # Axis 1 is t'
                 plt.tight_layout()  # Ensures proper layout
-                plt.savefig(os.path.join(fits_dir, f'negf_effective_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'), bbox_inches='tight')
+                plt.savefig(os.path.join(fits_dir, f'negf_effective_neuron_pair_{i}_{stim}_stimulation_{str(ie)}.png'), bbox_inches='tight')
                 plt.close()
 
             
@@ -526,6 +526,11 @@ for (i_folder, folder) in enumerate(ds_list):
             plt.tight_layout()
             plt.savefig(fits_dir+sig_type+"eci_con_stim"+str(ie)+".png",bbox_inches="tight")
             plt.close(fig=fig)
+
+
+
+
+
 """
     # Get the direct anatomical connectome
 

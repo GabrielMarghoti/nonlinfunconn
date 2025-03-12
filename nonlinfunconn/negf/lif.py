@@ -28,7 +28,7 @@ class LIF:
         gamma_s: Union[float, np.ndarray] = 10.0,  # Synaptic decay rate
         gamma: Union[float, np.ndarray] = 10.0,  # Membrane potential decay rate
         beta: Union[float, np.ndarray] = 125,  # Inverse synaptic timescale
-        V_th: Union[float, np.ndarray] = None,  # Threshold potential for spiking
+        Vth: Union[float, np.ndarray] = None,  # Threshold potential for spiking
         E_c: Union[float, np.ndarray] = 0.0,  # Equilibrium membrane potential
         E_s: Union[float, np.ndarray] = 0.0,  # Synaptic reversal potential
         a_r: Union[float, np.ndarray] = 1.0,  # Synaptic rise time constant
@@ -49,7 +49,7 @@ class LIF:
         - gamma_s: Synaptic decay rate.
         - gamma: Membrane potential decay rate.
         - beta: Inverse synaptic timescale.
-        - V_th: Neuronal firing threshold.
+        - Vth: Neuronal firing threshold.
         - E_s: Synaptic reversal potential.
         - E_c: Leakege potential equilibrium potential.
         - a_r: Synaptic rise time constant.
@@ -89,11 +89,11 @@ class LIF:
         self.E_c = self._expand_to_array(E_c, num_neurons) 
         self.C = self._expand_to_array(C, num_neurons)  # Capacitance
 
-        # find V_th as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
-        _Veq, _Seq = self.kunert_eq()#self.find_equilibrium(np.zeros((num_neurons)))
-        if V_th is None:
-            V_th = _Veq
-        self.V_th = self._expand_to_array(V_th, (num_neurons, num_neurons))
+        # find Vth as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
+        _Veq, _Seq = self.find_eq_self_consistent()#self.find_equilibrium(np.zeros((num_neurons)))
+        if Vth is None:
+            Vth = _Veq
+        self.Vth = self._expand_to_array(Vth, (num_neurons, num_neurons))
 
         if np.all(Veq == None):
             self.Veq = _Veq
@@ -112,13 +112,13 @@ class LIF:
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
 
         # Initialize Green's function arrays
-        self.sigma_0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
-        self.gg_0 = np.zeros_like(self.sigma_0)
-        self.gs_0 = np.zeros_like(self.sigma_0)
-        self.g_0 = np.zeros_like(self.sigma_0)
-        self.sigma = np.zeros_like(self.sigma_0)
-        self.pi = np.zeros_like(self.sigma_0)
-        self.g = np.zeros_like(self.sigma_0)
+        self.sigma0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
+        self.gg0 = np.zeros_like(self.sigma0)
+        self.gs_0 = np.zeros_like(self.sigma0)
+        self.g0 = np.zeros_like(self.sigma0)
+        self.sigma = np.zeros_like(self.sigma0)
+        self.pi = np.zeros_like(self.sigma0)
+        self.g = np.zeros_like(self.sigma0)
 
         self.g_computed_flag = False
         self.g_eq_computed_flag = False
@@ -162,105 +162,65 @@ class LIF:
         
     def Veq_step(self, V, S):
         """
-        Resting membrane potentials, to be calculated self-consistently
+        Compute the updated membrane potentials self-consistently.
         
         Parameters:
-        - V: 1D array of membrane potentials.
-        - S: 1D array of synaptic activations.
+        - V: 1D NumPy array of membrane potentials.
+        - S: 1D NumPy array of synaptic activations.
         
         Returns:
-        - Y: 1D array of updated membrane potentials.
+        - Updated 1D NumPy array of membrane potentials.
         """
-        VV = np.repeat([V], V.shape[0], axis=0)  # Ensure VV is correctly shaped
+        # Reshape V for element-wise operations
+        V_exp = np.expand_dims(V, axis=0)  # Shape (1, N)
         
+        # Compute new membrane potential
         Y = self.E_c \
-            - np.sum(self.gamma_s * S / self.gamma * (VV.T - self.E_s), axis=1) \
-            - np.sum(self.gamma_g / self.gamma * (VV.T - V[None, :]), axis=1)
+            - np.sum((self.gamma_s * S / self.gamma) * (V_exp - self.E_s), axis=1) \
+            - np.sum((self.gamma_g / self.gamma) * (V_exp - V[:, None]), axis=1)
         
         return Y
 
-    def kunert_eq(self, maxit=100000, damp=1e-3, tol=5e-5):
+    def find_eq_self_consistent(self, maxit=100000, damp=1e-3, tol=5e-4):
         """
-        Find equilibrium values as in Kunert paper simulation.
-        
+        Find equilibrium membrane potentials using an iterative self-consistent method.
+
         Parameters:
         - maxit: Maximum number of iterations (default: 100000).
-        - damp: Damping factor for convergence stabilization (default: 1e-3).
+        - damp: Initial damping factor for stability (default: 1e-3).
         - tol: Convergence tolerance (default: 5e-5).
-        
+
         Returns:
-        - V: 1D array of resting membrane potentials.
-        - Seq: 1D array of synaptic activations at rest.
+        - V: 1D NumPy array of equilibrium membrane potentials.
+        - S_eq: 1D NumPy array of synaptic activations at rest.
         """
-        Seq = 0.5 * self.a_r / (0.5 * self.a_r + self.a_d)  # Closed-form solution
-        V = self.E_c.copy()
+        # Compute steady-state synaptic activation (precomputed value)
+        S_eq = 0.5 * self.a_r / (0.5 * self.a_r + self.a_d)
+        
+        # Initialize membrane potential
+        V = np.copy(self.E_c)
         
         for i in range(maxit):
-            Vold = np.copy(V)
-            V = (Vold + damp * self.Veq_step(Vold, Seq)) / (1. + damp)
-            dV = np.sum(np.abs((V - Vold) / Vold))
+            V_old = V.copy()
             
+            # Compute new potential with damping factor
+            V_new = self.Veq_step(V_old, S_eq)
+            V = V_old + damp * (V_new - V_old)
+            
+            # Check for convergence
+            dV = np.linalg.norm(V - V_old, ord=1) / np.linalg.norm(V_old, ord=1)
             if dV < tol:
                 break
+            
+            # Adaptive damping: Increase if changes are small, decrease if unstable
+            if i % 1000 == 0:
+                damp = min(0.01, damp * 1.1)  # Gradually increase damping for stability
+        
         else:
-            print(f"Warning: Maximum iterations ({maxit}) reached without convergence.")
-        
-        return V, Seq
-            
-    # old
-    def find_equilibrium(self, V0=None, S0=None, max_iter=10000, tol=1e-4, dt=0.01):
-        """
-        Simulates the LIF model until the system reaches an equilibrium state using the Euler method.
+            print(f"Warning: Did not converge within {maxit} iterations.")
+            V = np.copy(self.E_c)
 
-        Parameters:
-        - V0: Initial membrane potential (optional). If None, defaults to zeros.
-        - S0: Initial synaptic state (optional). If None, defaults to zeros.
-        - max_iter: Maximum number of iterations to run the simulation.
-        - tol: Convergence tolerance for equilibrium detection.
-        - dt: Time step for the Euler method (default: 0.01).
-
-        Returns:
-        - Veq: The equilibrium membrane potential.
-        - Seq: The equilibrium synaptic state.
-        - status: A boolean flag indicating whether equilibrium was reached.
-
-        Raises:
-        - ValueError: If V0 or S0 have incorrect shapes.
-        """
-        # Validate input shapes
-        if V0 is not None and V0.shape != (self.num_neurons,):
-            raise ValueError(f"V0 must have shape ({self.num_neurons},), but got {V0.shape}")
-        if S0 is not None and S0.shape != (self.num_neurons,):
-            raise ValueError(f"S0 must have shape ({self.num_neurons},), but got {S0.shape}")
-
-        # Initialize V and S
-        V = np.full((self.num_neurons), 0.8) if V0 is None else V0
-        S = np.full((self.num_neurons), 0.2) if S0 is None else S0
-        
-        for _ in range(max_iter):
-            # Compute synaptic current
-            I_syn = np.sum(S * (self.E_s[:, None] - V[None, :]), axis=0)
-
-            # Update membrane potential using Euler method
-            dV = (-(V - self.E_c) * self.gamma + I_syn) / self.C * dt
-            V_new = np.clip(V + dV, -1e6, 1e6)  # Clip V_new to reasonable bounds
-
-            # Update synaptic state (first-order kinetic model)
-            dS = (-self.gamma_s * S + self.beta * (1 - S) * np.exp(-self.a_r) - S * np.exp(-self.a_d)) * dt
-            S_new = np.clip(S + dS, 0, 1)       # Clip S_new to [0, 1] if it represents a probability
-
-            # Check for convergence
-            diff_V = np.linalg.norm(V_new - V) / np.linalg.norm(V)
-            diff_S = np.linalg.norm(S_new - S) / np.linalg.norm(S)
-            if diff_V < tol and diff_S < tol:
-                print("Equilibrium reached.")
-                return V_new, S_new
-
-            # Update for next iteration
-            V, S = V_new, S_new
-            
-        print("Warning: Equilibrium not reached within max iterations.")
-        return V, S
+        return V, S_eq
 
     def heaviside(self, t: np.ndarray) -> np.ndarray:
         """
@@ -284,33 +244,33 @@ class LIF:
         # Compute synaptic activation
         self.V = V
     
-    def synaptic_activation(self, V: np.ndarray, beta: np.ndarray, V_th: np.ndarray) -> np.ndarray:
+    def synaptic_activation(self, V: np.ndarray, beta: np.ndarray, Vth: np.ndarray) -> np.ndarray:
         """
         Compute the synaptic activation function.
 
         Parameters:
             V (np.ndarray): Membrane potential.
             beta (np.ndarray): Synaptic activation steepness.
-            V_th (np.ndarray): Threshold potential.
+            Vth (np.ndarray): Threshold potential.
 
         Returns:
             np.ndarray: Synaptic activation values.
         """
-        return 1 / (1 + np.exp(-beta * (V - V_th)))
+        return 1 / (1 + np.exp(-beta * (V - Vth)))
 
-    def d_synaptic_activation(self, V: np.ndarray, beta: np.ndarray, V_th: np.ndarray) -> np.ndarray:
+    def d_synaptic_activation(self, V: np.ndarray, beta: np.ndarray, Vth: np.ndarray) -> np.ndarray:
         """
         Compute the derivative of the synaptic activation function.
 
         Parameters:
             V (np.ndarray): Membrane potential.
             beta (np.ndarray): Synaptic activation steepness.
-            V_th (np.ndarray): Threshold potential.
+            Vth (np.ndarray): Threshold potential.
 
         Returns:
             np.ndarray: Derivative of the synaptic activation function.
         """
-        exp_term = np.exp(-beta * (V - V_th))
+        exp_term = np.exp(-beta * (V - Vth))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
     def compute_direct_equilibrium_green_functions(self):
@@ -325,24 +285,24 @@ class LIF:
                 if i == j : continue    # not consider self interaction 
                 if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
 
-                a_r, a_d, beta, Veq, V_th = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.V_th[i, j]
+                a_r, a_d, beta, Veq, Vth = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.Vth[i, j]
                 heaviside_func = self.heaviside((self.t_s -self.t_s[np.newaxis, :]))
                 
                 # Compute common factors
-                exp_factor_synaptic = np.exp(-((self.t_s -self.t_s[np.newaxis, :])) * (a_d - a_r / (1 + np.exp(-beta * (Veq - V_th)))))
-                synaptic_factor = a_r * (1 - self.Seq[i, j]) * self.d_synaptic_activation(Veq, beta, V_th)
+                exp_factor_synaptic = np.exp(-((self.t_s -self.t_s[np.newaxis, :])) * (a_d - a_r / (1 + np.exp(-beta * (Veq - Vth)))))
+                synaptic_factor = a_r * (1 - self.Seq[i, j]) * self.d_synaptic_activation(Veq, beta, Vth)
 
                 exp_factor_gs_gg = np.exp(-((self.t_s -self.t_s[np.newaxis, :])) * gamma_sum[i])
 
-                self.sigma_0[:, :, i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
-                self.gg_0[:, :, i, j] = heaviside_func * self.gamma_g[i, j] * exp_factor_gs_gg
+                self.sigma0[:, :, i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
+                self.gg0[:, :, i, j] = heaviside_func * self.gamma_g[i, j] * exp_factor_gs_gg
                 self.gs_0[:, :, i, j] = heaviside_func * self.gamma_s[i, j] * (self.E_s[i, j] - self.Veq[i]) * exp_factor_gs_gg
 
                 # Compute final Green's function
-                conv_s = nontt_conv(self.gs_0[:, :, i, j], self.sigma_0[:, :, i, j], self.dt)
-                self.g_0[:, :, i, j] = self.gg_0[:, :, i, j] + conv_s
+                conv_s = nontt_conv(self.gs_0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
+                self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
 
-        return self.g_0
+        return self.g0
 
     def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=5):
         """
@@ -357,10 +317,11 @@ class LIF:
 
 
         self.g_computed_flag = True
-        self.resolution = Vs.shape[0]
+        if Vs != None : 
+            self.resolution = Vs.shape[0]
+            self.Vs = Vs
         self.dt = dt
-        self.Vs = Vs
-        self.delta_Vs = Vs - self.Veq[None, :]
+        self.delta_Vs = self.Vs - self.Veq[None, :]
 
         if self.g_eq_computed_flag==False: _ = self.compute_direct_equilibrium_green_functions()
 
@@ -373,14 +334,14 @@ class LIF:
                 synaptic_diff = np.zeros_like(self.delta_Vs[:, j])
                 non_zero_indices = np.abs(self.delta_Vs[:, j]) >= 0.0001
                 synaptic_diff[non_zero_indices] = (
-                    self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.V_th[i, j]) - 
-                    self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.V_th[i, j])
+                    self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.Vth[i, j]) - 
+                    self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.Vth[i, j])
                 )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
 
                 for _ in range(iteration_index_MAX):  # Iterative approximation for self consistent series approximation
                     self.sigma[:, :, i, j] = (
-                        self.sigma_0[:, :, i, j] / 
-                        self.d_synaptic_activation(self.Veq[j]*np.ones((self.resolution)), self.beta[i, j], self.V_th[i, j])[None, :] * 
+                        self.sigma0[:, :, i, j] / 
+                        self.d_synaptic_activation(self.Veq[j]*np.ones((self.resolution)), self.beta[i, j], self.Vth[i, j])[None, :] * 
                         synaptic_diff[None, :] * (1 - (self.delta_Ss[None, :, i, j] / (1 - self.Seq[i, j])))
                     )
 
@@ -390,7 +351,7 @@ class LIF:
                     self.gs_0[:, :, i, j], 
                     (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) *  self.sigma[:, :, i, j], self.dt
                 )
-                self.g[:, :, i, j] = self.gg_0[:, :, i, j] + self.pi[:, :, i, j]
+                self.g[:, :, i, j] = self.gg0[:, :, i, j] + self.pi[:, :, i, j]
 
                 """ # for debbuging/testing
                 import matplotlib.pyplot as plt
@@ -520,12 +481,12 @@ class LIF:
         gamma_s = np.zeros_like(gamma_g)
         gamma = np.zeros(num_neurons)
         beta = np.zeros_like(gamma_g)
-        V_th = np.zeros_like(gamma_g)
+        Vth = np.zeros_like(gamma_g)
         E_s = np.zeros_like(gamma_g)
         a_r = np.zeros_like(gamma_g)
         a_d = np.zeros_like(gamma_g)
 
-        lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, V_th, E_s, a_r, a_d)
+        lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, Vth, E_s, a_r, a_d)
         lif.compute_equilibrium_green_functions()
         lif.compute_nonequilibrium_green_functions()
 

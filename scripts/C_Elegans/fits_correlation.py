@@ -217,13 +217,13 @@ if params['interacting'] == 0:
 # Cell
 Ci = params['C'] # Membrane capacitance 1 pF
 
-#Ci = Ci*1000  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
+Ci = Ci*500  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
 
 Gcell = params['Gcell'] # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
 
 # Electrical synapses
-ggap = params['ggap']*1000 # conductivity of electrical synapse [pS]
+ggap = params['ggap'] # conductivity of electrical synapse [pS]
 
 # Chemical synapses
 gsyn = params['gsyn'] # "conductivity" of chemical synapse [pS]
@@ -234,7 +234,7 @@ esynexc = params['esynexc']*1000 # reverse potential for excitatory synapses
 esyninh = params['esyninh']*1000 # reverse potential for inhibitory synapses
 
 # Print the parameters
-"""
+
 print(f"Gcell: {Gcell}")
 print(f"Ecell: {Ecell}")
 print(f"ggap: {ggap}")
@@ -244,7 +244,7 @@ print(f"ad: {ad}")
 print(f"beta: {beta}")
 print(f"esynexc: {esynexc}")
 print(f"esyninh: {esyninh}")
-"""
+
 
 # Build the Esyn array of the synaptic reverse potentials
 # The index is presynaptic neuron, which determines the neurotransmitter and
@@ -316,11 +316,6 @@ for (i_folder, folder) in enumerate(ds_list):
 
     for ie in np.arange(fconn.n_stim): # stimulation index
 
-        # Ensure output directory exists
-        fit_dir = main_dir + f"n_resp_neurons_{fconn.n_stim}/"
-        os.makedirs(fit_dir, exist_ok=True)
-
-
         i0 = max(0,fconn.i0s[ie])  # start of the stimulation
         i1 = fconn.i1s[ie]         # end of the stimulation
         shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
@@ -338,6 +333,12 @@ for (i_folder, folder) in enumerate(ds_list):
         #responding = np.arange(fconn.n_neurons)  # fit all neurons
         #n_responding = len(responding)
         
+        if n_responding_original < 10 : continue
+        # Ensure output directory exists
+        fits_dir = main_dir + f"n_resp_neurons_{n_responding_original}/"
+        os.makedirs(fits_dir, exist_ok=True)
+
+
         Y = np.zeros((time.shape[0], num_neurons)) # store the signal of all neurons in the network
         Y_smooth = np.zeros((time.shape[0], num_neurons))
         
@@ -490,7 +491,7 @@ for (i_folder, folder) in enumerate(ds_list):
             a_r = ar, 
             a_d = ad, 
             dt = fconn.Dt,
-            t_s=x,
+            ts=x,
             Veq= Y[shift_vol, responding]
         )
         

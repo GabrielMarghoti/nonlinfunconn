@@ -17,7 +17,7 @@ class LIF:
 
     def __init__(
         self,
-        t_s: np.ndarray = None,
+        ts: np.ndarray = None,
         dt: float = 1.0,
         num_neurons: int = None,
         Veq: Union[float, np.ndarray] = None,  # Equilibrium membrane potential
@@ -66,10 +66,10 @@ class LIF:
         self.Vs = Vs if Vs is not None else np.full((10, num_neurons), self.Veq)  # Default resolution = 10
         self.resolution = self.Vs.shape[0]  # Resolution determined by Vs shape
 
-        if t_s is None:
-            self.t_s = np.arange(0, self.resolution * self.dt, self.dt)
+        if ts is None:
+            self.ts = np.arange(0, self.resolution * self.dt, self.dt)
         else:
-            self.t_s = t_s
+            self.ts = ts
 
         # Expand parameters for all neurons
         # Gap junction conductance
@@ -114,7 +114,7 @@ class LIF:
         # Initialize Green's function arrays
         self.sigma0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
         self.gg0 = np.zeros_like(self.sigma0)
-        self.gs_0 = np.zeros_like(self.sigma0)
+        self.gs0 = np.zeros_like(self.sigma0)
         self.g0 = np.zeros_like(self.sigma0)
         self.sigma = np.zeros_like(self.sigma0)
         self.pi = np.zeros_like(self.sigma0)
@@ -274,35 +274,51 @@ class LIF:
         return (beta * exp_term) / (1 + exp_term) ** 2
 
     def compute_direct_equilibrium_green_functions(self):
-        self.g_eq_computed_flag==True
-        # Precompute repeated values outside loops where possible
-        gamma_sum = self.gamma[:, np.newaxis] + np.sum(self.gamma_g, axis=1)[:, np.newaxis] + np.sum(self.gamma_s * self.Seq, axis=1)[:, np.newaxis]
-        
-        for i in range(self.num_neurons):
-            if gamma_sum[i] == self.gamma[i] : continue    # not connected node 
-            for j in range(self.num_neurons):
+        self.g_eq_computed_flag = True 
 
-                if i == j : continue    # not consider self interaction 
-                if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
+        ts_diff = self.ts[:, np.newaxis] - self.ts
+        heaviside_func = self.heaviside(ts_diff)
+
+        gamma_sum = self.gamma[:, np.newaxis] + np.sum(self.gamma_g, axis=1)[:, np.newaxis] + np.sum(self.gamma_s * self.Seq, axis=1)[:, np.newaxis]
+
+        for i in range(self.num_neurons):
+            if gamma_sum[i] == self.gamma[i]: 
+                continue  # Skip unconnected nodes
+
+            exp_factor_gs_gg = np.exp(-ts_diff * gamma_sum[i])
+
+            for j in range(self.num_neurons):
+                if i == j or (self.gamma_g[i, j] == 0 and self.gamma_s[i, j] == 0):
+                    continue  # Skip self-interaction & null kernels
 
                 a_r, a_d, beta, Veq, Vth = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.Vth[i, j]
-                heaviside_func = self.heaviside((self.t_s -self.t_s[np.newaxis, :]))
                 
-                # Compute common factors
-                exp_factor_synaptic = np.exp(-((self.t_s -self.t_s[np.newaxis, :])) * (a_d - a_r / (1 + np.exp(-beta * (Veq - Vth)))))
+                
+                exp_factor_synaptic = np.exp(-ts_diff * (a_d - a_r / (1 + np.exp(-beta * (Veq - Vth)))))
                 synaptic_factor = a_r * (1 - self.Seq[i, j]) * self.d_synaptic_activation(Veq, beta, Vth)
-
-                exp_factor_gs_gg = np.exp(-((self.t_s -self.t_s[np.newaxis, :])) * gamma_sum[i])
 
                 self.sigma0[:, :, i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
                 self.gg0[:, :, i, j] = heaviside_func * self.gamma_g[i, j] * exp_factor_gs_gg
-                self.gs_0[:, :, i, j] = heaviside_func * self.gamma_s[i, j] * (self.E_s[i, j] - self.Veq[i]) * exp_factor_gs_gg
+                self.gs0[:, :, i, j] = heaviside_func * self.gamma_s[i, j] * (self.E_s[i, j] - self.Veq[i]) * exp_factor_gs_gg
 
-                # Compute final Green's function
-                conv_s = nontt_conv(self.gs_0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
+                conv_s = nontt_conv(self.gs0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
                 self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
+                """
+                import matplotlib.pyplot as plt
+                plt.figure(figsize=(6, 4), dpi=200)
+            
+                plt.plot(self.ts[-1] - self.ts, self.g0[-1, :, i, j], linewidth=1.4, linestyle='solid')
+                
+                plt.xlabel("t - t′ (s)")
+                plt.ylabel(f"g0 ({i},{j})")
+                plt.legend([f"g0 ({i},{j})"], bbox_to_anchor=(1, 1), loc='upper left', borderaxespad=0.)
 
-        return self.g0
+                plt.grid(False)
+                plt.box(True)
+                
+                plt.show()
+                """
+            return self.g0
 
     def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=5):
         """
@@ -348,7 +364,7 @@ class LIF:
                     self.delta_Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
 
                 self.pi[:, :, i, j] = nontt_conv(
-                    self.gs_0[:, :, i, j], 
+                    self.gs0[:, :, i, j], 
                     (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) *  self.sigma[:, :, i, j], self.dt
                 )
                 self.g[:, :, i, j] = self.gg0[:, :, i, j] + self.pi[:, :, i, j]
@@ -356,7 +372,7 @@ class LIF:
                 """ # for debbuging/testing
                 import matplotlib.pyplot as plt
                 
-                plt.plot(self.t_s[-1] - self.t_s, self.g[-1, :, i, j])
+                plt.plot(self.ts[-1] - self.ts, self.g[-1, :, i, j])
                 plt.xlabel('Time')
                 plt.ylabel('Green\'s Function')
                 plt.title(f'Green\'s Function for Neurons {i} and {j}')

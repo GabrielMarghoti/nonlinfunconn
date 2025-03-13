@@ -332,16 +332,8 @@ for (i_folder, folder) in enumerate(ds_list):
         # but fit everything - nope
         #responding = np.arange(fconn.n_neurons)  # fit all neurons
         #n_responding = len(responding)
-        
-        if n_responding_original < 10 : continue
-        # Ensure output directory exists
-        fits_dir = main_dir + f"n_resp_neurons_{n_responding_original}_ie_trial{ie}/"
-        os.makedirs(fits_dir, exist_ok=True)
 
 
-        Y = np.zeros((time.shape[0], num_neurons)) # store the signal of all neurons in the network
-        Y_smooth = np.zeros((time.shape[0], num_neurons))
-        
         # Get the unconstrained parameters to build a cleaned-up version of the
         # stimulated neuron's activity.
         stim_unc_par_dict = fconn.fit_params_unc[ie][stim]
@@ -360,6 +352,15 @@ for (i_folder, folder) in enumerate(ds_list):
         if stim_unc_par_dict["n_branches"]==0:
             tubatura.log("skipping "+str(ie)+" fit absent");continue
         
+        if n_responding_original < 10 : continue
+        # Ensure output directory exists
+        fits_dir = main_dir + f"n_resp_neurons_{n_responding_original}_ie_trial{ie}/"
+        os.makedirs(fits_dir, exist_ok=True)
+
+        Y = np.zeros((time.shape[0], num_neurons)) # store the signal of all neurons in the network
+        Y_smooth = np.zeros((time.shape[0], num_neurons))
+        
+
         stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
         
         for j in np.arange(n_responding):    

@@ -369,16 +369,15 @@ class LIF:
                 )
                 self.g[:, :, i, j] = self.gg0[:, :, i, j] + self.pi[:, :, i, j]
 
-                """ # for debbuging/testing
+                # for debbuging/testing
+                
                 import matplotlib.pyplot as plt
                 
-                plt.plot(self.ts[-1] - self.ts, self.g[-1, :, i, j])
+                plt.plot(self.ts[-1] - self.ts, self.g[-1, :, i, j].T)
                 plt.xlabel('Time')
                 plt.ylabel('Green\'s Function')
                 plt.title(f'Green\'s Function for Neurons {i} and {j}')
                 plt.show()
-                """
-
 
 
         self.G = np.copy(self.g)  # First approximation for effective Green's function

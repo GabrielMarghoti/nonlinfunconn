@@ -217,7 +217,7 @@ if params['interacting'] == 0:
 # Cell
 Ci = params['C'] # Membrane capacitance 1 pF
 
-Ci = Ci*500  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
+Ci = Ci*100  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
 
 Gcell = params['Gcell'] # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
@@ -335,7 +335,7 @@ for (i_folder, folder) in enumerate(ds_list):
         
         if n_responding_original < 10 : continue
         # Ensure output directory exists
-        fits_dir = main_dir + f"n_resp_neurons_{n_responding_original}/"
+        fits_dir = main_dir + f"n_resp_neurons_{n_responding_original}_ie_trial{ie}/"
         os.makedirs(fits_dir, exist_ok=True)
 
 
@@ -414,7 +414,7 @@ for (i_folder, folder) in enumerate(ds_list):
             Y[:,neu_j] = y
 
 
-  
+        import matplotlib.lines as mlines
         fig, ax = plt.subplots(figsize=(10, 6))  # Create figure and axis
         fig_smooth, ax_smooth = plt.subplots(figsize=(10, 6))  # Create smoothed figure and axis
 
@@ -426,10 +426,6 @@ for (i_folder, folder) in enumerate(ds_list):
             if not np.any(np.isfinite(y)) or not np.any(np.isfinite(y_smooth)):
                 continue  # Skip neurons with only NaN/Inf values
 
-            # Store signals
-            Y[:, neu_j] = y
-            Y_smooth[:, neu_j] = y_smooth
-
             # Assign colors based on neuron type
             if neu_j == stim:
                 color, lw = "red", 2.5  # Stimulated neuron
@@ -440,6 +436,15 @@ for (i_folder, folder) in enumerate(ds_list):
 
             ax.plot(time, y, color=color, linewidth=lw, alpha=0.7)
             ax_smooth.plot(time, y_smooth, color=color, linewidth=lw, alpha=0.7)  # Corrected to use smoothed data
+
+        # Create custom legend handles
+        stim_handle = mlines.Line2D([], [], color="red", linewidth=2.5, label="Stimulated")
+        responsive_handle = mlines.Line2D([], [], color="blue", linewidth=2, label="Responsive")
+        non_responsive_handle = mlines.Line2D([], [], color="gray", linewidth=1, label="Non-responsive")
+
+        # Add legends to both plots
+        ax.legend(handles=[stim_handle, responsive_handle, non_responsive_handle], loc="upper right")
+        ax_smooth.legend(handles=[stim_handle, responsive_handle, non_responsive_handle], loc="upper right")
 
         # Set plot labels & titles
         ax.set_xlabel("Time (s)")
@@ -472,6 +477,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # Close figures properly
         plt.close(fig)
         plt.close(fig_smooth)
+
 
 ############################################################################################################        
 #        Compute NEGF kernels

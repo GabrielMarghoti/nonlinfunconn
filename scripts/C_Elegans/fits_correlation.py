@@ -363,8 +363,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
         stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
         
-
-        for neu_j in np.range(num_neurons):
+        for neu_j in np.arange(num_neurons):
             #if neu_j==stim: continue  # get segment of stimulated neuron
             
             # Skip the following checks on i1 and simply fit on the time axis
@@ -414,8 +413,6 @@ for (i_folder, folder) in enumerate(ds_list):
                                         #normalize="none")[:,neu_j]
             #y = sig.get_segment(i0,i1,shift_vol)[:,neu_j]
             """
-            if np.all(np.isinf(y)) or np.all(np.isnan(y)): continue
-            y[np.isinf(y)] = y[np.where(np.isinf(y))[0]-1]
             
 
 

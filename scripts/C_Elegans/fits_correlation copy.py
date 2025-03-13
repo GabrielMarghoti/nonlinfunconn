@@ -257,15 +257,8 @@ for (i_folder, folder) in enumerate(ds_list):
 
     #if i_folder>2: break   # remove to process all datasets
     print("Processing dataset", i_folder, ":", folder)
-
-
-    # Create functional connectome
-    fconn = pp.Fconn.from_file(folder)
-    #shift_vol = fconn.shift_vol
-
-    
     # Ensure output directory exists
-    fits_dir = output_folder + "_".join(ds_tags[i_folder]) + f"_fits/n_neurons_{fconn.n_stim}/"
+    fits_dir = output_folder + "_".join(ds_tags[i_folder]) + "_fits/"
     os.makedirs(fits_dir, exist_ok=True)
 
 
@@ -291,15 +284,16 @@ for (i_folder, folder) in enumerate(ds_list):
     # detection of responses)
     sig.remove_spikes()
     #sig.median_filter()
-    sig.smooth(n=40,i=None,poly=10,mode="sg")
+    sig.smooth(n=50,i=None,poly=16,mode="sg")
 
     # Get the neurons coordinates of the reference volume and load the matches
     # to determine what neuron was targeted
     cervelli = wormb.Brains.from_file(folder,ref_only=True)
     labels = cervelli.get_labels(0)
 
-
-    if fconn.n_stim < 11: continue                    ###################### consider only elevated number of responses
+    # Create functional connectome
+    fconn = pp.Fconn.from_file(folder)
+    #shift_vol = fconn.shift_vol
 
     # Check that the targets have been manually located, and, if not, ask for 
     # confirmation.

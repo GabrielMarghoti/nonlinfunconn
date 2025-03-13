@@ -263,13 +263,13 @@ for (i_folder, folder) in enumerate(ds_list):
     fconn = pp.Fconn.from_file(folder)
     #shift_vol = fconn.shift_vol
 
-    
+
     # Ensure output directory exists
-    fits_dir = output_folder + "_".join(ds_tags[i_folder]) + f"_fits/n_neurons_{fconn.n_stim}/"
-    os.makedirs(fits_dir, exist_ok=True)
+    main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"_fits/"
+    os.makedirs(main_dir, exist_ok=True)
 
 
-    tubatura = pp.Pipeline("fits_correlation.py",folder=fits_dir)
+    tubatura = pp.Pipeline("fits_correlation.py",folder=main_dir)
     tubatura.open_logbook_f()
     tubatura.log("",False)
     tubatura.log("",False)
@@ -278,7 +278,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
     # Load the signal
     if not sig_green:
-        sig = wormdm.signal.Signal.from_signal_and_reference(fits_dir)
+        sig = wormdm.signal.Signal.from_signal_and_reference(main_dir)
     else:
         tubatura.log("Using green signal.")
         sig = wormdm.signal.Signal.from_file(
@@ -315,6 +315,12 @@ for (i_folder, folder) in enumerate(ds_list):
     tubatura.log("Fitting with n_branches_max = 2")
 
     for ie in np.arange(fconn.n_stim): # stimulation index
+
+        # Ensure output directory exists
+        fit_dir = main_dir + f"n_resp_neurons_{fconn.n_stim}/"
+        os.makedirs(fit_dir, exist_ok=True)
+
+
         i0 = max(0,fconn.i0s[ie])  # start of the stimulation
         i1 = fconn.i1s[ie]         # end of the stimulation
         shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.

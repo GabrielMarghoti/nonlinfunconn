@@ -357,63 +357,39 @@ for (i_folder, folder) in enumerate(ds_list):
         fits_dir = main_dir + f"n_resp_neurons_{n_responding_original}_ie_trial{ie}/"
         os.makedirs(fits_dir, exist_ok=True)
 
-        Y = np.zeros((time.shape[0], num_neurons)) # store the signal of all neurons in the network
-        Y_smooth = np.zeros((time.shape[0], num_neurons))
-        
+        i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
+
+        x = time[shift_vol:i1p]
+
+        Y = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")
+        Y_smooth = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")
 
         stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
         
-        for neu_j in range(num_neurons):
-            #if neu_j==stim: continue  # get segment of stimulated neuron
-            
-            # Skip the following checks on i1 and simply fit on the time axis
-            # before the next stimulus. This also avoids fits of the next response.
-            if ie<1:
-                i1p = None
-            elif ie<fconn.n_stim-2:
-                inplus2 = neu_j in fconn.resp_neurons_by_stim[ie+2]
-                inplus1 = neu_j in fconn.resp_neurons_by_stim[ie+1]
-                i1p = None
-                if inplus2: i1p = shift_vol+np.sum(fconn.next_stim_after_n_vol[ie:ie+2])
-                if inplus1: i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
-            elif ie==fconn.n_stim-2:
-                inplus1 = neu_j in fconn.resp_neurons_by_stim[ie+1]
-                i1p = None
-                if inplus1: i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
-            else:
-                i1p = None
-            #i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
-            if ie == fconn.n_stim-1: i1p = None
-                    
-            x = time[shift_vol:i1p]
 
-
-            Y[:,neu_j] = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")[:, neu_j]
-            Y_smooth[:,neu_j] = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")[:, neu_j]
-
-            """
-            # Determine the range for baseline subtraction. Keep the full shift_vol
-            # interval if the neuron was not responding before. But shorten it
-            # if the neuron was responding to the previous stimulation. This latter
-            # case is more sensitive to the noise, but avoids systematic wrong
-            # baselines due to ongoing dynamics in the shift_vol segment.
-            if ie>0:
-                if neu_j in fconn.resp_neurons_by_stim[ie-1]:
-                    y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
-                                        baseline_mode="constant",
-                                        baseline_range=[shift_vol-4,shift_vol])[:,neu_j]#, FIXME FIXME FIXME
-                                        #normalize="none")[:,neu_j]
-                else:
-                    y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
-                                        baseline_mode="constant")[:,neu_j]#, FIXME FIXME FIXME
-                                        #normalize="none")[:,neu_j]                                 
+        """
+        # Determine the range for baseline subtraction. Keep the full shift_vol
+        # interval if the neuron was not responding before. But shorten it
+        # if the neuron was responding to the previous stimulation. This latter
+        # case is more sensitive to the noise, but avoids systematic wrong
+        # baselines due to ongoing dynamics in the shift_vol segment.
+        if ie>0:
+            if neu_j in fconn.resp_neurons_by_stim[ie-1]:
+                y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                                    baseline_mode="constant",
+                                    baseline_range=[shift_vol-4,shift_vol])[:,neu_j]#, FIXME FIXME FIXME
+                                    #normalize="none")[:,neu_j]
             else:
                 y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
-                                        baseline_mode="constant")[:,neu_j]#, FIXME FIXME FIXME
-                                        #normalize="none")[:,neu_j]
-            #y = sig.get_segment(i0,i1,shift_vol)[:,neu_j]
-            """
-            
+                                    baseline_mode="constant")[:,neu_j]#, FIXME FIXME FIXME
+                                    #normalize="none")[:,neu_j]                                 
+        else:
+            y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                                    baseline_mode="constant")[:,neu_j]#, FIXME FIXME FIXME
+                                    #normalize="none")[:,neu_j]
+        #y = sig.get_segment(i0,i1,shift_vol)[:,neu_j]
+        """
+        
 
         # plot signals
         import matplotlib.lines as mlines
@@ -498,7 +474,7 @@ for (i_folder, folder) in enumerate(ds_list):
             Veq= Y[shift_vol, responding]
         )
         
-        G_degree = 2
+        G_degree = n_responding
         g = nonlin_kernel.compute_direct_negf() 
         G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
         G0 = nonlin_kernel.compute_effective_negf(nonlin_kernel.g0, G_degree) # until second neighbors

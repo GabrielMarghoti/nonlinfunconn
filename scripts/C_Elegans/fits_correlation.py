@@ -363,9 +363,8 @@ for (i_folder, folder) in enumerate(ds_list):
 
         stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
         
-        for j in np.arange(n_responding):    
-            
-            neu_j = responding[j]
+
+        for neu_j in np.range(num_neurons):
             #if neu_j==stim: continue  # get segment of stimulated neuron
             
             # Skip the following checks on i1 and simply fit on the time axis
@@ -388,6 +387,12 @@ for (i_folder, folder) in enumerate(ds_list):
             if ie == fconn.n_stim-1: i1p = None
                     
             x = time[shift_vol:i1p]
+
+
+            Y[:,neu_j] = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")[:, neu_j]
+            Y_smooth[:,neu_j] = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")[:, neu_j]
+
+            """
             # Determine the range for baseline subtraction. Keep the full shift_vol
             # interval if the neuron was not responding before. But shorten it
             # if the neuron was responding to the previous stimulation. This latter
@@ -408,11 +413,10 @@ for (i_folder, folder) in enumerate(ds_list):
                                         baseline_mode="constant")[:,neu_j]#, FIXME FIXME FIXME
                                         #normalize="none")[:,neu_j]
             #y = sig.get_segment(i0,i1,shift_vol)[:,neu_j]
+            """
             if np.all(np.isinf(y)) or np.all(np.isnan(y)): continue
             y[np.isinf(y)] = y[np.where(np.isinf(y))[0]-1]
-            y_plt = y
-
-            Y[:,neu_j] = y
+            
 
 
         import matplotlib.lines as mlines
@@ -420,12 +424,6 @@ for (i_folder, folder) in enumerate(ds_list):
         fig_smooth, ax_smooth = plt.subplots(figsize=(10, 6))  # Create smoothed figure and axis
 
         for neu_j in range(fconn.n_neurons):  # Iterate over all neurons
-            # Extract signal for this neuron (raw and smoothed)
-            y = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")[:, neu_j]
-            y_smooth = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")[:, neu_j]
-            
-            if not np.any(np.isfinite(y)) or not np.any(np.isfinite(y_smooth)):
-                continue  # Skip neurons with only NaN/Inf values
 
             # Assign colors based on neuron type
             if neu_j == stim:
@@ -435,8 +433,8 @@ for (i_folder, folder) in enumerate(ds_list):
             else:
                 color, lw = "gray", 1  # Non-responsive neurons
 
-            ax.plot(time, y, color=color, linewidth=lw, alpha=0.7)
-            ax_smooth.plot(time, y_smooth, color=color, linewidth=lw, alpha=0.7)  # Corrected to use smoothed data
+            ax.plot(time, Y[:, neu_j], color=color, linewidth=lw, alpha=0.7)
+            ax_smooth.plot(time, Y_smooth[:, neu_j], color=color, linewidth=lw, alpha=0.7)  # Corrected to use smoothed data
 
         # Create custom legend handles
         stim_handle = mlines.Line2D([], [], color="red", linewidth=2.5, label="Stimulated")
@@ -485,6 +483,7 @@ for (i_folder, folder) in enumerate(ds_list):
 ############################################################################################################
         # Compute the direct NEGF kernel
         # Initialize the NEGF kernel class
+
         nonlin_kernel = nlfc.negf.LIF(
             Vs = Y_smooth[shift_vol:i1p, responding],  # Membrane potential dynamics (sliced signals)
             num_neurons = n_responding,

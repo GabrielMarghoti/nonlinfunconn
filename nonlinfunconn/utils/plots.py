@@ -14,7 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 
-def time_level_curves(time, G, G0, save_path):
+def time_level_curves(time, G, G0, save_path = None):
     plt.figure(figsize=(6, 4), dpi=200)
     
     plt.plot(time[-1] - time[:], G0[-1, :], label="G₀", color='black', linewidth=2.4)
@@ -59,10 +59,13 @@ def time_level_curves(time, G, G0, save_path):
     plt.grid(False)
     plt.box(True)
     
-    plt.savefig(save_path, bbox_inches='tight')
+    if save_path == None:
+        plt.show()
+    else:
+        plt.savefig(save_path, bbox_inches='tight')
     plt.close()
 
-def time_level_curves_single_kernel(time, G, save_path):
+def time_level_curves_single_kernel(time, G, save_path= None):
     plt.figure(figsize=(6, 4), dpi=200)
     
     plt.plot()
@@ -84,11 +87,14 @@ def time_level_curves_single_kernel(time, G, save_path):
     plt.grid(False)
     plt.box(True)
     
-    plt.savefig(save_path, bbox_inches='tight')
+    if save_path == None:
+        plt.show()
+    else:
+        plt.savefig(save_path, bbox_inches='tight')
     plt.close()
 
 
-def t_t_heatmap(time, G, save_path):
+def t_t_heatmap(time, G, save_path= None):
     plt.figure()
     plt.imshow(G[:, :], aspect='auto', cmap='viridis',
         extent=[time.min(), time.max(), time.min(), time.max()])
@@ -96,5 +102,8 @@ def t_t_heatmap(time, G, save_path):
     plt.xlabel('t (s)')  # Axis 0 is t
     plt.ylabel('t’ (s)')  # Axis 1 is t'
     plt.tight_layout()  # Ensures proper layout
-    plt.savefig(save_path, bbox_inches='tight')
+    if save_path == None:
+        plt.show()
+    else:
+        plt.savefig(save_path, bbox_inches='tight')
     plt.close()

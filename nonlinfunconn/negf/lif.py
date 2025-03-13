@@ -3,18 +3,19 @@ from scipy.optimize import minimize, least_squares
 from typing import Optional, Tuple, Union
 from nonlinfunconn import convolution
 from ..utils.nontt_conv import  nontt_conv
-
+from ..utils.plots import t_t_heatmap
 import numpy as np
 from typing import Union, Tuple
 
 import numpy as np
 from typing import Union, Tuple
+
 
 class LIF:
     """
     Leaky Integrate-and-Fire (LIF) neural network model with Green's function computation.
     """
-
+    
     def __init__(
         self,
         ts: np.ndarray = None,
@@ -37,93 +38,68 @@ class LIF:
     ):
         """
         Initialize the LIF model.
-
-        Parameters:
-        - dt: Time step for simulation.
-        - num_neurons: Number of neurons in the network.
-        - Veq: Equilibrium membrane potential (scalar or array).
-        - Seq: Equilibrium synaptic state (scalar or array).
-        - Vs: Predefined membrane potential dynamics (or initialized to Veq).
-        - Ss: Predefined synaptic state dynamics (or initialized to Seq).
-        - gamma_g: Conductance decay rate.
-        - gamma_s: Synaptic decay rate.
-        - gamma: Membrane potential decay rate.
-        - beta: Inverse synaptic timescale.
-        - Vth: Neuronal firing threshold.
-        - E_s: Synaptic reversal potential.
-        - E_c: Leakege potential equilibrium potential.
-        - a_r: Synaptic rise time constant.
-        - a_d: Synaptic decay time constant.
-        - C: Membrane capacitance.
         """
+        
+        if num_neurons is None:
+            raise ValueError("num_neurons must be specified.")
+        
         self.dt = dt
         self.num_neurons = num_neurons
-
-        if self.num_neurons is None:
-            raise ValueError("num_neurons must be specified.")
-
-        # Initialize membrane potential and synaptic state arrays
-        self.Vs = Vs if Vs is not None else np.full((10, num_neurons), self.Veq)  # Default resolution = 10
-        self.resolution = self.Vs.shape[0]  # Resolution determined by Vs shape
-
-        if ts is None:
-            self.ts = np.arange(0, self.resolution * self.dt, self.dt)
-        else:
-            self.ts = ts
-
-        # Expand parameters for all neurons
-        # Gap junction conductance
+        
+        # Ensure resolution can be determined
+        self.Vs = Vs if Vs is not None else np.zeros((1, num_neurons))
+        self.resolution = self.Vs.shape[0]
+        
+        self.ts = ts if ts is not None else np.arange(0, self.resolution * self.dt, self.dt)
+        
+        # Expand parameters to appropriate shapes
         self.gamma_g = self._expand_to_array(gamma_g, (num_neurons, num_neurons))
-
-        # Chemmical synapse parameters
         self.gamma_s = self._expand_to_array(gamma_s, (num_neurons, num_neurons))
-        self.E_s =    self._expand_to_array(E_s, (num_neurons, num_neurons))
-
+        self.E_s = self._expand_to_array(E_s, (num_neurons, num_neurons))
         self.beta = self._expand_to_array(beta, (num_neurons, num_neurons))
-
         self.a_r = self._expand_to_array(a_r, (num_neurons, num_neurons))
         self.a_d = self._expand_to_array(a_d, (num_neurons, num_neurons))
-
-        # One compartiment model cell parameters
-        self.gamma = self._expand_to_array(gamma, num_neurons)  # Membrane potential decay rate
-        self.E_c = self._expand_to_array(E_c, num_neurons) 
-        self.C = self._expand_to_array(C, num_neurons)  # Capacitance
-
+        self.gamma = self._expand_to_array(gamma, num_neurons)
+        self.E_c = self._expand_to_array(E_c, num_neurons)
+        self.C = self._expand_to_array(C, num_neurons)
+        
         # find Vth as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
         _Veq, _Seq = self.find_eq_self_consistent()#self.find_equilibrium(np.zeros((num_neurons)))
         if Vth is None:
             Vth = _Veq
         self.Vth = self._expand_to_array(Vth, (num_neurons, num_neurons))
 
-        if np.all(Veq == None):
+        if np.all(Veq) == None:
             self.Veq = _Veq
         else:
             self.Veq = Veq
         
-        if np.all(Seq == None):
+        if np.all(Seq) == None:
             self.Seq = _Seq
         else:
             self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
 
+        # Initialize synaptic state
         self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
-
+        
         # Compute deviations from equilibrium states
         self.delta_Vs = self.Vs - self.Veq[None, :]
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
-
+        
         # Initialize Green's function arrays
-        self.sigma0 = np.zeros((self.resolution, self.resolution, num_neurons, num_neurons))
+        shape = (self.resolution, self.resolution, num_neurons, num_neurons)
+        self.sigma0 = np.zeros(shape)
         self.gg0 = np.zeros_like(self.sigma0)
         self.gs0 = np.zeros_like(self.sigma0)
         self.g0 = np.zeros_like(self.sigma0)
         self.sigma = np.zeros_like(self.sigma0)
         self.pi = np.zeros_like(self.sigma0)
         self.g = np.zeros_like(self.sigma0)
-
+        self.G = np.zeros_like(self.g)
+        
+        # Flags for computation tracking
         self.g_computed_flag = False
         self.g_eq_computed_flag = False
-
-        self.G = np.zeros_like(self.g)      # Effective Green's function
 
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:   #### This must be an .util method
         """
@@ -303,21 +279,6 @@ class LIF:
 
                 conv_s = nontt_conv(self.gs0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
                 self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
-                """
-                import matplotlib.pyplot as plt
-                plt.figure(figsize=(6, 4), dpi=200)
-            
-                plt.plot(self.ts[-1] - self.ts, self.g0[-1, :, i, j], linewidth=1.4, linestyle='solid')
-                
-                plt.xlabel("t - t′ (s)")
-                plt.ylabel(f"g0 ({i},{j})")
-                plt.legend([f"g0 ({i},{j})"], bbox_to_anchor=(1, 1), loc='upper left', borderaxespad=0.)
-
-                plt.grid(False)
-                plt.box(True)
-                
-                plt.show()
-                """
             return self.g0
 
     def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=5):
@@ -343,7 +304,7 @@ class LIF:
 
         self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq)  # Initialize synaptic state dynamics for iterative approximation
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
-
+        
         for i in range(self.num_neurons):
             for j in range(self.num_neurons):
                 if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
@@ -368,17 +329,6 @@ class LIF:
                     (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) *  self.sigma[:, :, i, j], self.dt
                 )
                 self.g[:, :, i, j] = self.gg0[:, :, i, j] + self.pi[:, :, i, j]
-
-                # for debbuging/testing
-                
-                import matplotlib.pyplot as plt
-                
-                plt.plot(self.ts[-1] - self.ts, self.g[-1, :, i, j].T)
-                plt.xlabel('Time')
-                plt.ylabel('Green\'s Function')
-                plt.title(f'Green\'s Function for Neurons {i} and {j}')
-                plt.show()
-
 
         self.G = np.copy(self.g)  # First approximation for effective Green's function
         return self.g

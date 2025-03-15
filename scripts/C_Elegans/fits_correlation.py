@@ -474,7 +474,7 @@ for (i_folder, folder) in enumerate(ds_list):
             Veq= Y[shift_vol, responding]
         )
         
-        G_degree = n_responding
+        G_degree = 4
         g = nonlin_kernel.compute_direct_negf() 
         G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
         G0 = nonlin_kernel.compute_effective_negf(nonlin_kernel.g0, G_degree) # until second neighbors

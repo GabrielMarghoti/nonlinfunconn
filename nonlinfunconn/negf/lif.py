@@ -346,20 +346,27 @@ class LIF:
 
         G = np.copy(g)  # First-order Green's function
 
-        for path_len in range(2, max_paths_len + 1):  # Ensure this aligns with expected logic
+        for path_len in range(2, max_paths_len + 1):
             for i in range(self.num_neurons):
                 for j in range(self.num_neurons):
-                    if i == j or np.all(g[:, :, i, j] == 0):
-                        continue  # Skip self-connections and no-interaction pairs
+                    if i == j:
+                        continue  # Skip self-connections
+                    
+                    visited = np.zeros(self.num_neurons, dtype=bool)  # Track visited nodes
+                    visited[i] = True  # Mark start node as visited
                     
                     for k in range(self.num_neurons):
-                        if k in (i, j) or np.all(g[:, :, i, k] == 0) or np.all(g[:, :, k, j] == 0):
-                            continue  # Skip invalid paths
+                        if visited[k] or k in (i, j):
+                            continue  # Skip if already visited or self-loops
                         
-                        # Iterative update of Green's function
+                        if np.all(g[:, :, i, k] == 0) or np.all(g[:, :, k, j] == 0):
+                            continue  # Ensure connectivity exists before doing the computation
+                        
+                        # Iterative update of Green's function while preventing revisits
                         G[:, :, i, j] += nontt_conv(g[:, :, i, k], G[:, :, k, j])
-
-
+                        
+                        visited[k] = True  # Mark intermediate node as visited
+    
         return G
 
 

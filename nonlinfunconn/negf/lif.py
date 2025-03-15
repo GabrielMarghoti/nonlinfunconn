@@ -345,17 +345,18 @@ class LIF:
         """
 
         G = np.copy(g)  # First-order Green's function
+        num_eff_neurons = G.shape[-1]
 
         for path_len in range(2, max_paths_len + 1):
-            for i in range(self.num_neurons):
-                for j in range(self.num_neurons):
+            for i in range(num_eff_neurons):
+                for j in range(num_eff_neurons):
                     if i == j:
                         continue  # Skip self-connections
                     
-                    visited = np.zeros(self.num_neurons, dtype=bool)  # Track visited nodes
+                    visited = np.zeros(num_eff_neurons, dtype=bool)  # Track visited nodes
                     visited[i] = True  # Mark start node as visited
                     
-                    for k in range(self.num_neurons):
+                    for k in range(num_eff_neurons):
                         if visited[k] or k in (i, j):
                             continue  # Skip if already visited or self-loops
                         

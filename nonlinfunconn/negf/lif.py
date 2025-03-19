@@ -258,15 +258,12 @@ class LIF:
         gamma_sum = self.gamma[:, np.newaxis] + np.sum(self.gamma_g, axis=1)[:, np.newaxis] + np.sum(self.gamma_s * self.Seq, axis=1)[:, np.newaxis]
 
         for i in range(self.num_neurons):
-            if gamma_sum[i] == self.gamma[i]: 
-                continue  # Skip unconnected nodes
-
             exp_factor_gs_gg = np.exp(-ts_diff * gamma_sum[i])
 
             for j in range(self.num_neurons):
                 if i == j or (self.gamma_g[i, j] == 0 and self.gamma_s[i, j] == 0):
                     continue  # Skip self-interaction & null kernels
-
+                
                 a_r, a_d, beta, Veq, Vth = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.Vth[i, j]
                 
                 
@@ -279,7 +276,8 @@ class LIF:
 
                 conv_s = nontt_conv(self.gs0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
                 self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
-            return self.g0
+                
+        return self.g0
 
     def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=5):
         """
@@ -347,29 +345,19 @@ class LIF:
         G = np.copy(g)  # First-order Green's function
         num_eff_neurons = G.shape[-1]
 
-        for path_len in range(2, max_paths_len + 1):
+        for _ in range(2, max_paths_len+1):
             for i in range(num_eff_neurons):
                 for j in range(num_eff_neurons):
-                    if i == j:
-                        continue  # Skip self-connections
-                    
-                    visited = np.zeros(num_eff_neurons, dtype=bool)  # Track visited nodes
-                    visited[i] = True  # Mark start node as visited
-                    
+                    if i==j: continue # Avoids self loops
                     for k in range(num_eff_neurons):
-                        if visited[k] or k in (i, j):
-                            continue  # Skip if already visited or self-loops
-                        
+
                         if np.all(g[:, :, i, k] == 0) or np.all(g[:, :, k, j] == 0):
                             continue  # Ensure connectivity exists before doing the computation
                         
                         # Iterative update of Green's function while preventing revisits
                         G[:, :, i, j] += nontt_conv(g[:, :, i, k], G[:, :, k, j])
-                        
-                        visited[k] = True  # Mark intermediate node as visited
     
         return G
-
 
     def eval(self, x, dtype=np.float64, drop_branches=None):
         """

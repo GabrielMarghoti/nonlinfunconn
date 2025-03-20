@@ -300,8 +300,6 @@ for (i_folder, folder) in enumerate(ds_list):
     labels = cervelli.get_labels(0)
 
 
-    if fconn.n_stim < 21: continue                    ###################### consider only elevated number of responses
-
     # Check that the targets have been manually located, and, if not, ask for 
     # confirmation.
     if not fconn.manually_located_present:
@@ -335,6 +333,8 @@ for (i_folder, folder) in enumerate(ds_list):
         #responding = np.arange(fconn.n_neurons)  # fit all neurons
         #n_responding = len(responding)
         
+
+        if n_responding_original < 21: continue                    ###################### consider only elevated number of responses
 
         # Get the unconstrained parameters to build a cleaned-up version of the
         # stimulated neuron's activity.

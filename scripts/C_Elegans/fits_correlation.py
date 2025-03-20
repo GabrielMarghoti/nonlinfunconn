@@ -300,7 +300,7 @@ for (i_folder, folder) in enumerate(ds_list):
     labels = cervelli.get_labels(0)
 
 
-    if fconn.n_stim < 11: continue                    ###################### consider only elevated number of responses
+    if fconn.n_stim < 21: continue                    ###################### consider only elevated number of responses
 
     # Check that the targets have been manually located, and, if not, ask for 
     # confirmation.
@@ -326,7 +326,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # Get the indices of the stimulated neuron and of the responding neurons.
         stim = fconn.stim_neurons[ie]
 
-        responding_original = np.arange(fconn.n_neurons) # fconn.resp_neurons_by_stim[ie]
+        responding_original = fconn.resp_neurons_by_stim[ie]
         
         n_responding_original = len(responding_original)
         responding = responding_original
@@ -509,7 +509,7 @@ for (i_folder, folder) in enumerate(ds_list):
                 neu_i = responding[i]
                 neu_j = responding[j]
                 if np.all(g[1:, 1:, i, j] == 0.0) : continue
-                nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(fits_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(fits_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
                 nlfc.utils.plots.time_level_curves(x, g[:, :, i, j], nonlin_kernel.g0[:, :, i, j], os.path.join(fits_dir, f'negf_direct_g_level_curves_neuron_pair_{neu_i}_{neu_j}_stimulation_{str(ie)}.png'))
 
         # Plot heatmaps for each neuron pair
@@ -518,7 +518,7 @@ for (i_folder, folder) in enumerate(ds_list):
                 neu_i = responding[i]
                 neu_j = responding[j]
                 if np.all(G[1:, 1:, i, j] == 0.0) : continue
-                nlfc.utils.plots.t_t_heatmap(x, G[:, :, i, j], os.path.join(fits_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                #nlfc.utils.plots.t_t_heatmap(x, G[:, :, i, j], os.path.join(fits_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
                 nlfc.utils.plots.time_level_curves(x, G[:, :, i, j], G0[:, :, i, j], os.path.join(fits_dir, f'negf_G{G_degree}_level_curves_neuron_pair_{neu_i}_{neu_j}_stimulation_{str(ie)}.png'))
 
         gc.collect()

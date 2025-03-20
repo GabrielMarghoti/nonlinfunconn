@@ -99,8 +99,8 @@ def t_t_heatmap(time, G, save_path= None):
     plt.imshow(G[:, :], aspect='auto', cmap='viridis',
         extent=[time.min(), time.max(), time.min(), time.max()])
     plt.colorbar()
-    plt.xlabel('t (s)')  # Axis 0 is t
-    plt.ylabel('t’ (s)')  # Axis 1 is t'
+    plt.xlabel('t’ (s)')  # Axis 0 is t
+    plt.ylabel('t (s)')  # Axis 1 is t'
     plt.tight_layout()  # Ensures proper layout
     if save_path == None:
         plt.show()

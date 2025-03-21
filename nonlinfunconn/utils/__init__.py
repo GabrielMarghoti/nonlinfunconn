@@ -6,3 +6,4 @@ from .integration import integral as integral_py
 from .irrarray import irrarray
 from .nontt_conv import nontt_conv
 from .plots import time_level_curves, t_t_heatmap
+from .netplots import neural_network, connect_matrices_heatmap

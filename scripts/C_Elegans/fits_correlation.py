@@ -218,7 +218,7 @@ if params['interacting'] == 0:
 # Cell
 Ci = params['C'] # Membrane capacitance 1 pF
 
-Ci = Ci*500  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
+Ci = Ci*100  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
 
 Gcell = params['Gcell'] # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
@@ -312,6 +312,9 @@ for (i_folder, folder) in enumerate(ds_list):
             quit()
             
     tubatura.log("Fitting with n_branches_max = 2")
+
+    # plot neural network complete
+    nlfc.utils.netplots.neural_network((Ggap*ggap/Ci), (Gsyn*gsyn/Ci), Esyn, np.array(labels), os.path.join(main_dir, f'Neural_Network_total.png'))
 
     for ie in np.arange(fconn.n_stim): # stimulation index
 
@@ -461,6 +464,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # Initialize the NEGF kernel class
         gamma_g = (Ggap*ggap/Ci)[responding][:, responding]
         gamma_s = (Gsyn*gsyn/Ci)[responding][:, responding]
+        Es = Esyn[responding][:, responding]
         nonlin_kernel = nlfc.negf.LIF(
             Vs = Y_smooth[shift_vol:i1p, responding],  # Membrane potential dynamics (sliced signals)
             num_neurons = n_responding,
@@ -470,7 +474,7 @@ for (i_folder, folder) in enumerate(ds_list):
             C = Ci,  
             beta= beta,  
             E_c = Ecell, 
-            E_s = Esyn[responding][:, responding], 
+            E_s = Es, 
             a_r = ar, 
             a_d = ad, 
             dt = fconn.Dt,
@@ -478,26 +482,9 @@ for (i_folder, folder) in enumerate(ds_list):
             Veq= Y[shift_vol, responding]
         )
         # Plot gamma_g and gamma_s as heatmaps
-        fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-
-        # Plot gamma_g heatmap
-        cax1 = ax[0].imshow(gamma_g, cmap='viridis', aspect='auto')
-        ax[0].set_title('gamma_g Heatmap')
-        ax[0].set_xlabel('Neuron Index')
-        ax[0].set_ylabel('Neuron Index')
-        fig.colorbar(cax1, ax=ax[0])
-
-        # Plot gamma_s heatmap
-        cax2 = ax[1].imshow(gamma_s, cmap='viridis', aspect='auto')
-        ax[1].set_title('gamma_s Heatmap')
-        ax[1].set_xlabel('Neuron Index')
-        ax[1].set_ylabel('Neuron Index')
-        fig.colorbar(cax2, ax=ax[1])
-
-        # Save and close the figure
-        plt.tight_layout()
-        plt.savefig(os.path.join(fits_dir, 'gamma_g_gamma_s_heatmaps.png'), bbox_inches='tight')
-        plt.close(fig)
+        nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, os.path.join(fits_dir, 'gamma_g_gamma_s_heatmaps.png'))
+        # plot neural network
+        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels), os.path.join(fits_dir, f'Neural_Network_responding_only.png'))
 
         G_degree = 2
         g = nonlin_kernel.compute_direct_negf() 
@@ -532,8 +519,8 @@ for (i_folder, folder) in enumerate(ds_list):
         ###############
             
         # Create a directory for saving individual neuron plots
-        output_folder = os.path.join(fits_dir, "neuron_plots")
-        os.makedirs(output_folder, exist_ok=True)
+        output_folder_2 = os.path.join(fits_dir, "neuron_plots")
+        os.makedirs(output_folder_2, exist_ok=True)
         """
         nrows = max(1,int(np.sqrt(num_neurons)))
         ncols = int(np.sqrt(num_neurons))+2
@@ -637,7 +624,7 @@ for (i_folder, folder) in enumerate(ds_list):
         
             # Save plot with neuron index in filename
             filename = f"neuron_{neu_i}:{labels[neu_i]}.png"
-            plt.savefig(os.path.join(output_folder, filename), bbox_inches="tight")
+            plt.savefig(os.path.join(output_folder_2, filename), bbox_inches="tight")
             plt.close(fig)
             
 

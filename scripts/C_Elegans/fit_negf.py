@@ -636,7 +636,9 @@ for (i_folder, folder) in enumerate(ds_list):
             ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
             ax[ax_r, ax_c].axvline(0, c="k", alpha=0.5)
             ax[ax_r, ax_c].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
-            ax[ax_r, ax_c].legend()
+            
+            if i_plot == len(responding) - 1:  # Add legend only for the last panel
+                ax[ax_r, ax_c].legend()
         
     # Save plot with neuron index in filename
     filename = f"panels_mult_stimulation_fits.png"

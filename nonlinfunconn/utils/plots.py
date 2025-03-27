@@ -17,7 +17,7 @@ from matplotlib.colors import to_rgba
 def time_level_curves(time, G, G0, save_path = None):
     plt.figure(figsize=(6, 4), dpi=200)
     
-    plt.plot(time[-1] - time[:], G0[-1, :], label="G₀", color='black', linewidth=2.4)
+    plt.plot(time[-1] - time[:], G0, label="G₀", color='black', linewidth=2.4)
     
     # Corrected selection of probe times
     probe_times_idx = np.linspace(0, len(time) - 1, num=10, dtype=int)

@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+from scipy.integrate import simps
 
 import os, sys, time, json
 import pumpprobe as pp
@@ -289,7 +290,7 @@ for (i_folder, folder) in enumerate(ds_list):
     sig.median_filter()
 
     #sig.get_smoothed(127,None,3,"sg_causal")
-    sig.smooth(n=127,i=None,poly=3,mode="sg")
+    sig.smooth(n=60,i=None,poly=4,mode="sg")
 
     # Get the neurons coordinates of the reference volume and load the matches
     # to determine what neuron was targeted
@@ -315,7 +316,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
     num_stimulations = len(stimulations_idx)
 
-    if num_stimulations < 5: continue # consider only neurons stimulated at least 5 times
+    if num_stimulations < 4: continue # consider only neurons stimulated at least 4 times
 
     stim_neuron_label = labels[stim]
 
@@ -400,6 +401,25 @@ for (i_folder, folder) in enumerate(ds_list):
     Y_total = np.concatenate(Y_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
     Y_smooth_total = np.concatenate(Y_smooth_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
 
+    responses_correlations = np.zeros((n_responding, num_stimulations, num_stimulations))
+    trial_variations = np.zeros(n_responding)
+    common_trials = np.zeros(n_responding, dtype=int)
+
+    for i in range(n_responding):
+        neu_i = responding[i]
+        responses_correlations[i, :, :] = np.corrcoef(
+                    Y_smooth_total[:, shift_vol:i1p, neu_i]
+                )
+        # Calculate the standard deviation of the correlation matrix for each neuron
+        trial_variations[i] = np.std(responses_correlations[i, :, :])
+
+    # Find the neuron with the most variation in trial correlations
+    most_variable_neuron_idx = np.argmax(trial_variations)
+    most_variable_neuron = responding[most_variable_neuron_idx] 
+
+    print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
+    
+
     # save connectome based network considering only responsive neurons over all stimulations
     gamma_g = (Ggap*ggap/Ci)[responding][:, responding] 
     gamma_s = (Gsyn*gsyn/Ci)[responding][:, responding]
@@ -436,7 +456,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
             # Assign colors based on neuron type
             if neu_j == stim:
-                color, lw = "red", 3.5  # Stimulated neuron
+                color, lw = "red", 3  # Stimulated neuron
             elif neu_j in responding:
                 color, lw = "blue", 2  # Responsive neurons
             else:
@@ -499,8 +519,12 @@ for (i_folder, folder) in enumerate(ds_list):
         fig.clear()
     except:
         pass
-    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(30, 20)) 
+    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(16, 12)) 
+    fig2, ax2 = plt.subplots(nrows=1, ncols=2, figsize=(12, 6)) 
     for a in np.ravel(ax): 
+        a.set_xticks([])
+        a.set_yticks([])
+    for a in np.ravel(ax2): 
         a.set_xticks([])
         a.set_yticks([])
     if nrows == 1: 
@@ -559,11 +583,11 @@ for (i_folder, folder) in enumerate(ds_list):
             i0 = max(0, fconn.i0s[ie])  # start of the stimulation
             i1 = fconn.i1s[ie]         # end of the stimulation
             shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
-            time = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  # Dt is in seconds, convert time steps to times domain (s)
             # notice the slice for the signal is based on the stimulated neuron signal only
             
             i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
 
+            time = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  # Dt is in seconds, convert time steps to times domain (s)
             x = time[shift_vol:i1p]
             
             #print("plotting")
@@ -614,14 +638,24 @@ for (i_folder, folder) in enumerate(ds_list):
             if neu_i == stim: 
                 lbl += "*"
                 lw = 3
+                ax2[0].set_title(panel_title, fontsize=10)
+                ax2[0].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+                ax2[0].set_xlim(time[0], time[-1])
+                ax2[0].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
+                ax2[0].axvline(0, c="k", alpha=0.5)
+                ax2[0].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
+
+            elif neu_i == most_variable_neuron:
+                ax2[1].set_title(panel_title, fontsize=10)
+                ax2[1].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+                ax2[1].set_xlim(time[0], time[-1])
+                ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
+                ax2[1].axvline(0, c="k", alpha=0.5)
+                ax2[1].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
+                ax2[1].legend()
+
 
             ax[ax_r, ax_c].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-
-            #params = fconn.get_irrarray_from_params(params_dict)
-            #rf = pp.Fconn.eci(x, params)
-            #fit_y = pp.convolution(stim_y, rf, fconn.Dt, 8)
-            fit_ls = "-"
-            #fit_lbl = "|".join([str(nbp - 1) for nbp in n_branch_params])
 
             #rf_plt = rf
             #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
@@ -637,17 +671,33 @@ for (i_folder, folder) in enumerate(ds_list):
             ax[ax_r, ax_c].axvline(0, c="k", alpha=0.5)
             ax[ax_r, ax_c].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
             
+            #params = fconn.get_irrarray_from_params(params_dict)
+            #rf = pp.Fconn.eci(x, params)
+            #fit_y = pp.convolution(stim_y, rf, fconn.Dt, 8)
+            fit_ls = "-"
+            #fit_lbl = "|".join([str(nbp - 1) for nbp in n_branch_params])
+
             if i_plot == len(responding) - 1:  # Add legend only for the last panel
                 ax[ax_r, ax_c].legend()
         
     # Save plot with neuron index in filename
     filename = f"panels_mult_stimulation_fits.png"
-    plt.savefig(os.path.join(main_dir, filename), bbox_inches="tight")
+    filename2 = f"most_variable_neuron_response.png"
+    fig.savefig(os.path.join(main_dir, filename), bbox_inches="tight")
     plt.close(fig)        # Plot heatmaps for each neuron pair
+    fig2.savefig(os.path.join(main_dir, filename2), bbox_inches="tight")
+    plt.close(fig2)        # Plot heatmaps for each neuron pair
+
+
+
+
+
+
+
 
 
     """
-    # save plot the NEGF for each stiimulation and each neuron pair (consider source only the stim neuron)
+    # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
     for i in range(n_responding):
         neu_i = responding[i]
         neu_j = stim

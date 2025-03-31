@@ -145,6 +145,11 @@ funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
                                  ds_tags=ds_tags,ds_exclude_tags=ds_exclude_tags,
                                  verbose=False)
 
+#occ1,occ2 = funa.get_occurrence_matrix(req_auto_response=True)
+#occ3 = funa.get_observation_matrix(req_auto_response=True)
+#km = funa.get_kernels_map(occ2,occ3,filtered=True,include_flat_kernels=False)
+
+
 #aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
 #num_neurons = aconn_chem.shape[0]
 
@@ -377,6 +382,29 @@ for (i_folder, folder) in enumerate(ds_list):
 
         x = time[shift_vol:i1p]
 
+        # Determine the range for baseline subtraction. Keep the full shift_vol
+        # interval if the neuron was not responding before. But shorten it
+        # if the neuron was responding to the previous stimulation. This latter
+        # case is more sensitive to the noise, but avoids systematic wrong
+        # baselines due to ongoing dynamics in the shift_vol segment.
+        """
+        # MUST CONSIDER CORRECTION IF THE RESPONSIVE NEURONS HAVE PREVIOUS STIMULATION ACTIVATION (far from equilibrium), which error it introduces? it imposes linearity?
+        for neu_i in np.arange(n_responding_ie):
+            if ie>0:
+                if neu_i in fconn.resp_neurons_by_stim[ie-1]:
+                    Y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                                        baseline_mode="constant",
+                                        baseline_range=[shift_vol-4,shift_vol])[:,neu_i]#, FIXME FIXME FIXME
+                                        #normalize="none")[:,neu_j]
+                else:
+                    Y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                                        baseline_mode="constant")[:,neu_i]#, FIXME FIXME FIXME
+                                        #normalize="none")[:,neu_j]
+            else:
+                Y = sig.get_segment(i0,i1,shift_vol,unsmoothed_data=True,
+                                        baseline_mode="constant")[:,neu_i]#, FIXME FIXME FIXME
+                                        #normalize="none")[:,neu_j]
+        """
         Y = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")
         Y_smooth = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")
         """
@@ -524,18 +552,37 @@ for (i_folder, folder) in enumerate(ds_list):
     for a in np.ravel(ax): 
         a.set_xticks([])
         a.set_yticks([])
+        a.twinx().set_yticks([])
     for a in np.ravel(ax2): 
         a.set_xticks([])
         a.set_yticks([])
+        a.twinx().set_yticks([])
     if nrows == 1: 
         ax = np.array([ax])
 
 
     for i, neu_i in enumerate(responding):
 
+        # Plot only for detected responses
+        i_plot = np.where(responding==neu_i)[0][0]
+        ax_r = i_plot//ncols
+        ax_c = i_plot%ncols
+
+        panel_title = f"Neuron {neu_i}: {labels[neu_i]}"
+
+        k = []
+       
         for ie_idx, ie in enumerate(stimulations_idx):
             stim_color = color_map(ie_idx)  # Get a distinct color for each ie plot line
 
+            i0 = max(0, fconn.i0s[ie])  # start of the stimulation
+            i1 = fconn.i1s[ie]         # end of the stimulation
+            shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
+
+            i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
+
+            time = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  # Dt is in seconds, convert time steps to times domain (s)
+            x = time[shift_vol:i1p]
 
             y_plt = Y_total[ie_idx, :,neu_i]
             y = Y_total[ie_idx, :,neu_i][shift_vol:i1p]
@@ -572,12 +619,8 @@ for (i_folder, folder) in enumerate(ds_list):
             # Get the unconstrained parameters to build a cleaned-up version of the stimulated neuron's activity (FOR LIN KERNEL)
             stim_unc_par_dict = fconn.fit_params_unc[ie][stim]
             stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
-
-            try:
-                stim_y = pp.Fconn.eci(x, stim_unc_par)  # stim_y is an exponential kernel
-            except:
-                stim_y = Y_smooth_total[ie_idx, :, stim]
-                continue
+            
+            stim_y = pp.Fconn.eci(x, stim_unc_par)  # stim_y is an exponential kernel
 
             # Data segmentation based on stimulation window
             i0 = max(0, fconn.i0s[ie])  # start of the stimulation
@@ -585,23 +628,11 @@ for (i_folder, folder) in enumerate(ds_list):
             shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
             # notice the slice for the signal is based on the stimulated neuron signal only
             
-            i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
 
-            time = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  # Dt is in seconds, convert time steps to times domain (s)
-            x = time[shift_vol:i1p]
+            #loc_std = sig.get_loc_std(y_smooth,4)
             
-            #print("plotting")
-            # Plot only for detected responses
-            i_plot = np.where(responding==neu_i)[0][0]
-            ax_r = i_plot//ncols
-            ax_c = i_plot%ncols
+            fconn.clear_fit_results(stim=ie,neu=neu_i,mode="constrained")
             
-            loc_std = sig.get_loc_std(y_smooth,4)
-            
-            #fconn.clear_fit_results(stim=ie,neu=neu_i,mode="constrained")
-            
-            #rms_calc_lim = min(int(30/fconn.Dt),len(x))
-            """
             n_hops_min = 2
             
             params_, n_branch_params, _ = fconn.fit_eci_branching(
@@ -622,38 +653,39 @@ for (i_folder, folder) in enumerate(ds_list):
                         "n_branches": len(n_branch_params), 
                         "n_branch_params": n_branch_params}
             fconn.fit_params[ie][neu_i] = params_dict
-            """
+            
+
+            params = fconn.get_irrarray_from_params(params_dict)
+            
+            k.append(pp.Fconn.eci(x,params))
 
             """
             for j in range(n_responding):
                 if Gsyn[i, j] == 0 and Ggap[i, j]==0: continue # avoid computing null kernells (no connection)
                 nonlin_fit_y[:, i] += nlfc.nontt_conv(g[:, :, i, j], Y_smooth[ie, shift_vol:i1p, j])
             """
-            panel_title = f"Neuron {neu_i}: {labels[neu_i]}"
-            ax[ax_r, ax_c].set_title(panel_title, fontsize=10)
 
             #lbl = str(neu_i)
             lbl = f'stim. {ie}'
             lw = 1
             if neu_i == stim: 
                 lbl += "*"
-                lw = 3
+                lw = 2
                 ax2[0].set_title(panel_title, fontsize=10)
                 ax2[0].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+                #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                 ax2[0].set_xlim(time[0], time[-1])
                 ax2[0].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
                 ax2[0].axvline(0, c="k", alpha=0.5)
-                ax2[0].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
+                #ax2[0].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
 
             elif neu_i == most_variable_neuron:
                 ax2[1].set_title(panel_title, fontsize=10)
                 ax2[1].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+                #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                 ax2[1].set_xlim(time[0], time[-1])
                 ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
                 ax2[1].axvline(0, c="k", alpha=0.5)
-                ax2[1].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
-                ax2[1].legend()
-
 
             ax[ax_r, ax_c].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
 
@@ -661,25 +693,47 @@ for (i_folder, folder) in enumerate(ds_list):
             #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
             stim_y_plt = stim_y / np.sum(stim_y) * np.abs(np.sum(y))
 
-            #ax[ax_r, ax_c].plot(x, fit_y, label=fit_lbl, c=stim_color, lw=2, ls=fit_ls)
             # ax[ax_r, ax_c].plot(x, nonlin_fit_y[:, i], label="FIT NEGF" + "|" + "g", lw=2, ls=fit_ls, c="r")
             # ax[ax_r, ax_c].plot(x, rf_plt, label="rf", lw=2, c="k")
             # ax[ax_r, ax_c].plot(x, stim_y_plt, label=f"st stimulation {ie}", lw=2, c=stim_color, alpha=0.6)
 
-            ax[ax_r, ax_c].set_xlim(time[0], time[-1])
-            ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
-            ax[ax_r, ax_c].axvline(0, c="k", alpha=0.5)
-            ax[ax_r, ax_c].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
-            
             #params = fconn.get_irrarray_from_params(params_dict)
             #rf = pp.Fconn.eci(x, params)
-            #fit_y = pp.convolution(stim_y, rf, fconn.Dt, 8)
-            fit_ls = "-"
-            #fit_lbl = "|".join([str(nbp - 1) for nbp in n_branch_params])
+            #fit_y = km[neu_i, stim,  :] # pp.convolution(stim_y, rf, fconn.Dt, 8)
+            #fit_ls = ":"
+            #fit_lbl = "Av. kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
+            #ax[ax_r, ax_c].plot(np.linspace(0,60,120), fit_y, label=fit_lbl, c=stim_color, lw=1, ls=fit_ls)
 
-            if i_plot == len(responding) - 1:  # Add legend only for the last panel
-                ax[ax_r, ax_c].legend()
-        
+        # Find the minimum length of arrays in k
+        min_len = min(len(item) for item in k)
+
+        # Trim each array to min_len using list comprehension
+        k_trimmed = [item[:min_len] for item in k]
+
+        # Compute the average
+        lin_kernel = np.average(np.array(k_trimmed), axis=0)
+
+        fit_y =  pp.convolution(lin_kernel,Y_smooth_total[ie_idx, :,stim], fconn.Dt,8)
+        fit_ls = ":"
+        fit_lbl = "Av. kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
+        if neu_i == stim:
+            panel_title = "Stimulated "+ panel_title
+            ax2[0].plot(time, stim_y, label="Filtered Stim.", c='gray', lw=1)
+        elif neu_i == most_variable_neuron:
+            ax2[1].twinx().plot(np.linspace(0, 60, len(fit_y)), fit_y, label=fit_lbl, c='gray', lw=1, ls=fit_ls)
+            ax2[1].legend()
+        ax[ax_r, ax_c].twinx().plot(np.linspace(0, 60, len(fit_y)), fit_y, label=fit_lbl, c='gray', lw=1, ls=fit_ls)
+
+        ax[ax_r, ax_c].set_xlim(time[0], time[-1])
+        ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
+        ax[ax_r, ax_c].axvline(0, c="k", alpha=0.8)
+
+        ax[ax_r, ax_c].set_title(panel_title, fontsize=10)
+
+        if i_plot == len(responding) - 1:  # Add legend only for the last panel
+            ax[ax_r, ax_c].legend()
+
+
     # Save plot with neuron index in filename
     filename = f"panels_mult_stimulation_fits.png"
     filename2 = f"most_variable_neuron_response.png"
@@ -687,10 +741,6 @@ for (i_folder, folder) in enumerate(ds_list):
     plt.close(fig)        # Plot heatmaps for each neuron pair
     fig2.savefig(os.path.join(main_dir, filename2), bbox_inches="tight")
     plt.close(fig2)        # Plot heatmaps for each neuron pair
-
-
-
-
 
 
 

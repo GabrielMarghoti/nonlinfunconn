@@ -292,10 +292,10 @@ for (i_folder, folder) in enumerate(ds_list):
     # Smooth and calculate the derivative of the signal (derivative needed for
     # detection of responses)
     sig.remove_spikes()
-    sig.median_filter()
+    #sig.median_filter()
 
     #sig.get_smoothed(127,None,3,"sg_causal")
-    sig.smooth(n=60,i=None,poly=4,mode="sg")
+    sig.smooth(n=120,i=None,poly=7,mode="sg")
 
     # Get the neurons coordinates of the reference volume and load the matches
     # to determine what neuron was targeted
@@ -321,7 +321,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
     num_stimulations = len(stimulations_idx)
 
-    if num_stimulations < 4: continue # consider only neurons stimulated at least 4 times
+    if num_stimulations < 3: continue # consider only neurons stimulated at least 3 times
 
     stim_neuron_label = labels[stim]
 
@@ -633,11 +633,9 @@ for (i_folder, folder) in enumerate(ds_list):
             
             fconn.clear_fit_results(stim=ie,neu=neu_i,mode="constrained")
             
-            n_hops_min = 2
-            
             params_, n_branch_params, _ = fconn.fit_eci_branching(
                             x,y_smooth,stim_y,dt=fconn.Dt,
-                            n_hops_min=1,n_hops_max=3,
+                            n_hops_min=2,n_hops_max=3,
                             n_branches_max=2,#3,
                             rms_limits=[None,None],auto_stop=True,rms_tol=1e-2,
                             method="trf",routine="least_squares")
@@ -657,7 +655,8 @@ for (i_folder, folder) in enumerate(ds_list):
 
             params = fconn.get_irrarray_from_params(params_dict)
             
-            k.append(pp.Fconn.eci(x,params))
+            k_trial = pp.Fconn.eci(x,params)
+            k.append(k_trial)
 
             """
             for j in range(n_responding):
@@ -665,8 +664,11 @@ for (i_folder, folder) in enumerate(ds_list):
                 nonlin_fit_y[:, i] += nlfc.nontt_conv(g[:, :, i, j], Y_smooth[ie, shift_vol:i1p, j])
             """
 
+            fit_y_trial =  pp.convolution(stim_y, k_trial, fconn.Dt,8)
+
             #lbl = str(neu_i)
             lbl = f'stim. {ie}'
+            fit_lbl = "Trial kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
             lw = 1
             if neu_i == stim: 
                 lbl += "*"
@@ -682,12 +684,14 @@ for (i_folder, folder) in enumerate(ds_list):
             elif neu_i == most_variable_neuron:
                 ax2[1].set_title(panel_title, fontsize=10)
                 ax2[1].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+                ax2[1].plot(x, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
                 #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                 ax2[1].set_xlim(time[0], time[-1])
                 ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
                 ax2[1].axvline(0, c="k", alpha=0.5)
 
             ax[ax_r, ax_c].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+            ax[ax_r, ax_c].plot(x, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
 
             #rf_plt = rf
             #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
@@ -713,16 +717,17 @@ for (i_folder, folder) in enumerate(ds_list):
         # Compute the average
         lin_kernel = np.average(np.array(k_trimmed), axis=0)
 
-        fit_y =  pp.convolution(lin_kernel,Y_smooth_total[ie_idx, :,stim], fconn.Dt,8)
-        fit_ls = ":"
+        fit_y =  pp.convolution(stim_y, lin_kernel, fconn.Dt,8)
+        fit_ls = "-"
         fit_lbl = "Av. kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
         if neu_i == stim:
             panel_title = "Stimulated "+ panel_title
-            ax2[0].plot(time, stim_y, label="Filtered Stim.", c='gray', lw=1)
+            ax2[0].plot(x, stim_y, label="Filtered Stim.", c='yellow', lw=1)
+            ax2[0].legend()
         elif neu_i == most_variable_neuron:
-            ax2[1].twinx().plot(np.linspace(0, 60, len(fit_y)), fit_y, label=fit_lbl, c='gray', lw=1, ls=fit_ls)
+            ax2[1].plot(x, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
             ax2[1].legend()
-        ax[ax_r, ax_c].twinx().plot(np.linspace(0, 60, len(fit_y)), fit_y, label=fit_lbl, c='gray', lw=1, ls=fit_ls)
+        ax[ax_r, ax_c].plot(x, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
 
         ax[ax_r, ax_c].set_xlim(time[0], time[-1])
         ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))

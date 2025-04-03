@@ -1,17 +1,13 @@
 import numpy as np
-from scipy.optimize import minimize, least_squares
 from typing import Optional, Tuple, Union
+from scipy.optimize import minimize, least_squares
+
 from nonlinfunconn import convolution
 from ..utils.nontt_conv import  nontt_conv
-from ..utils.plots import t_t_heatmap
-import numpy as np
-from typing import Union, Tuple
-
-import numpy as np
-from typing import Union, Tuple
 
 
-class LIF:
+
+class LIF():
     """
     Leaky Integrate-and-Fire (LIF) neural network model with Green's function computation.
     """
@@ -39,6 +35,11 @@ class LIF:
         """
         Initialize the LIF model.
         """
+
+        self.attribute_list = [
+            "gamma_g", "gamma_s", "gamma", "beta", "Vth",
+            "E_c", "E_s", "a_r", "a_d", "C"
+        ]
         
         if num_neurons is None:
             raise ValueError("num_neurons must be specified.")
@@ -47,11 +48,12 @@ class LIF:
         self.num_neurons = num_neurons
         
         # Ensure resolution can be determined
-        self.Vs = Vs if Vs is not None else np.zeros((1, num_neurons))
+        self.Vs = Vs if Vs is not None else np.zeros((self.resolution, num_neurons))
         self.resolution = self.Vs.shape[0]
         
         self.ts = ts if ts is not None else np.arange(0, self.resolution * self.dt, self.dt)
         
+
         # Expand parameters to appropriate shapes
         self.gamma_g = self._expand_to_array(gamma_g, (num_neurons, num_neurons))
         self.gamma_s = self._expand_to_array(gamma_s, (num_neurons, num_neurons))
@@ -81,8 +83,8 @@ class LIF:
 
         # Initialize synaptic state
         self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
-        
         # Compute deviations from equilibrium states
+
         self.delta_Vs = self.Vs - self.Veq[None, :]
         self.delta_Ss = self.Ss - self.Seq[None, :, :]
         
@@ -279,7 +281,7 @@ class LIF:
                 
         return self.g0
 
-    def compute_direct_negf(self, Vs: np.ndarray = None,  dt : float = 1.0, iteration_index_MAX=5):
+    def compute_direct_negf(self, Vs, p: np.ndarray = None, dt : float = 1.0, iteration_index_MAX=5, return_estimated_V=False):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -290,11 +292,19 @@ class LIF:
             iteration_index_MAX (int): Maximum number of iterations for the Neumann series approximation.
         """
 
+        # Update class attributes with optimized parameters
+        if p is not None:
+            offset = 0
+            for attr in self.attribute_list:
+                size = getattr(self, attr).size
+                setattr(self, attr, p[offset:offset + size].reshape(getattr(self, attr).shape))
+                offset += size
+
 
         self.g_computed_flag = True
-        if Vs != None : 
-            self.resolution = Vs.shape[0]
-            self.Vs = Vs
+        self.Veq = Vs[0,:]
+        self.resolution = Vs.shape[0]
+        self.Vs = Vs
         self.dt = dt
         self.delta_Vs = self.Vs - self.Veq[None, :]
 
@@ -329,7 +339,16 @@ class LIF:
                 self.g[:, :, i, j] = self.gg0[:, :, i, j] + self.pi[:, :, i, j]
 
         self.G = np.copy(self.g)  # First approximation for effective Green's function
-        return self.g
+
+        if return_estimated_V:
+            est_V = self.Veq # in the future change for V0
+            for i in range(self.num_neurons):
+                for j in range(self.num_neurons):
+                    est_V[i] += nontt_conv(self.g[:, :, i, j], self.delta_Vs)
+            
+            return self.g , est_V
+        else:
+            return self.g
 
     def compute_effective_negf(self, g, max_paths_len: int = 2):
         """
@@ -359,106 +378,75 @@ class LIF:
     
         return G
 
-    def eval(self, x, dtype=np.float64, drop_branches=None):
-        """
-        Evaluates the NEGFs in the time domain.
-
-        Parameters:
-        - x: array_like, Time axis. All times should be positive.
-        - dtype: type (optional), Type of the output array. Default: np.float64        
-        - drop_branches: int or array_like of int, Branches to be ignored in the evaluation. Default: None.
-                
-        Returns:
-        - np.ndarray: ExponentialConvolution evaluated on x.
-        """
-        assert np.all(x >= 0)
-            
-        if drop_branches is not None:
-            try:
-                len(drop_branches)
-            except:
-                drop_branches = [drop_branches]
-            
-        out = np.zeros_like(x, dtype=dtype)
-                
-        for exp in self.exp[-1]:
-            # Skip terms that are in excluded branches
-            branch = exp["branch"]
-            if drop_branches is not None and branch in drop_branches:
-                continue
-                    
-            g = exp["g"]
-            factor = exp["factor"]
-            power_t = exp["power_t"]
-                
-            if power_t == 0:
-                mult = 1.0
-            else:
-                mult = np.power(x, power_t)
-            out += factor * mult * np.exp(-g * x)
-                
-        return out
-
-
-    @classmethod
     def fit(
-        cls,
-        signal: np.ndarray,
-        dt: float,
+        self,
+        Y: np.ndarray,
         n_neigh_max: int = 2,
         rms_limits: Optional[Tuple[int, int]] = None,
         auto_stop: bool = False,
         rms_tol: float = 1e-2,
-        method: Optional[str] = None,
+        method: Optional[str] = 'trf',
         routine: str = "least_squares",
         p0: Optional[np.ndarray] = None
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
         """
         Fit the LIF model to the given signal.
 
         Parameters:
-        - signal (np.ndarray): Signal to fit (shape: [resolution, num_neurons]).
+        - x (np.ndarray): Input data (e.g., stimulus signal).
+        - y (np.ndarray): Target neural activation data (shape: [resolution, num_neurons]).
         - dt (float): Time step.
-        - n_neigh_max (int): Maximum number of neighbors for fitting.
-        - rms_limits (Optional[Tuple[int, int]]): Time limits for RMS calculation.
+        - n_neigh_max (int): Maximum number of neighbors for fitting (unused).
+        - rms_limits (Optional[Tuple[int, int]]): Time limits for RMS calculation (unused).
         - auto_stop (bool): Whether to stop fitting early if RMS improvement is below tolerance.
         - rms_tol (float): Tolerance for early stopping.
         - method (Optional[str]): Optimization method for `scipy.optimize`.
         - routine (str): Optimization routine ("minimize" or "least_squares").
+        - p0 (Optional[np.ndarray]): Initial parameter values.
 
         Returns:
-        - Tuple[np.ndarray, np.ndarray, np.ndarray]: Fitted parameters, branch parameters, and residuals.
+        - Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]: 
+        Fitted parameters, branch parameters (if applicable), and residuals (if applicable).
         """
-                    
-        num_neurons = signal.shape[1]
-        resolution = signal.shape[0]
+        
+        n_trials, time_resolution, n_neurons = Y.shape
 
-        Veq = np.mean(signal, axis=0)
-        Seq = np.zeros((num_neurons, num_neurons))
-        Vs = np.zeros((resolution, num_neurons))
-        delta_Vs = np.zeros_like(Vs)
-        delta_Ss = np.zeros((resolution, num_neurons, num_neurons))
-        gamma_g = np.zeros((num_neurons, num_neurons))
-        gamma_s = np.zeros_like(gamma_g)
-        gamma = np.zeros(num_neurons)
-        beta = np.zeros_like(gamma_g)
-        Vth = np.zeros_like(gamma_g)
-        E_s = np.zeros_like(gamma_g)
-        a_r = np.zeros_like(gamma_g)
-        a_d = np.zeros_like(gamma_g)
+        # Ensure necessary attributes exist
+        for attr in self.attribute_list:
+            if not hasattr(self, attr):
+                raise AttributeError(f"Missing required class attribute: {attr}")
 
-        lif = cls(num_neurons, dt, Veq, Seq, Vs, delta_Vs, delta_Ss, gamma_g, gamma_s, gamma, beta, Vth, E_s, a_r, a_d)
-        lif.compute_equilibrium_green_functions()
-        lif.compute_nonequilibrium_green_functions()
+        # Flatten model parameters for optimization
+        param_list = [getattr(self, attr).flatten() for attr in self.attribute_list]
+        p0 = np.concatenate(param_list) if p0 is None else p0
+        original_params = p0.copy()
 
-        if p0 is None:
-            p0 = np.random.rand(num_neurons)
+        # Define error function
+        def error(p, X, Y):
+            Y_predicted = np.zeros_like(Y)
+            err = 0.0
+            for trial_idx in range(X.shape[0]):  # Iterate over trials
+            
+                # Ensure compute_direct_negf is implemented and correct
+                _, Y_predicted[trial_idx, :, :] = self.compute_direct_negf(Vs=X[trial_idx, :, :], p=p, return_estimated_V=True)
+                err += np.sum((Y_predicted[trial_idx, :, :] - Y[trial_idx, :, :]) ** 2)
+            err /= n_trials
+            # Compute squared error
+            return err
 
+        # Choose optimization method
         if routine == "minimize":
-            error = lambda p, x, y: np.sum(np.power(convolution(x, cls.eci(x, p), dt, 8) - y, 2))
-            res = minimize(error, p0, args=(signal, signal), method=method)
+            res = minimize(error, p0, args=(Y, Y), method='trf')
         elif routine == "least_squares":
-            residuals = lambda p, x, y: convolution(x, cls.eci(x, p), dt, 8) - y
-            res = least_squares(residuals, p0, args=(signal, signal), method=method)
+            res = least_squares(error, p0, args=(Y, Y), method='trf')
+        else:
+            raise ValueError(f"Invalid routine '{routine}'. Choose 'minimize' or 'least_squares'.")
+
+        # Update class attributes with optimized parameters
+        offset = 0
+        for attr in self.attribute_list:
+            size = getattr(self, attr).size
+            setattr(self, attr, res.x[offset:offset + size].reshape(getattr(self, attr).shape))
+            offset += size
 
         return res.x, None, None

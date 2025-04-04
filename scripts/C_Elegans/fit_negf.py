@@ -215,15 +215,17 @@ sign = np.ones((funa.n_neurons,funa.n_neurons))
 for k in np.arange(len(pre)):
     if pred[k] == "-":
         aj,ai = funa.ids_to_i([pre[k],post[k]])
-        sign[ai,aj] = -1
+        sign[ai,aj] = -1     # row are postsynaptic neurons, columns presynaptic neurons
 
 # Get the composite aconnectome via the Funatlas
 if aconn_ds_i is None:
-    Gsyn, Ggap = funa.get_aconnectome_from_file(chem_th=0,gap_th=0,exclude_white=False,average=True)
+    Gsyn, Ggap = funa.get_aconnectome_from_file(chem_th=0, gap_th=0, exclude_white=False, average=True)
+    Gsyn, Ggap = Gsyn.T, Ggap.T  # Transpose the adjacency matrices, my default is to have the ost-synaptic neurons index as rows
 else:
     aconn_folder = funa.module_folder
     aconn_fname = funa.aconn_sources[aconn_ds_i]["fname"]
-    Gsyn, Ggap = funa._get_aconnectome_witvliet(aconn_folder+aconn_fname)
+    Gsyn, Ggap = funa._get_aconnectome_witvliet(aconn_folder + aconn_fname)
+    Gsyn, Ggap = Gsyn.T, Ggap.T # Transpose the adjacency matrices, my default is to have the ost-synaptic neurons index as rows
 
 # Number of neurons
 num_neurons = len(Neurotrans)
@@ -339,9 +341,22 @@ for (i_folder, folder) in enumerate(ds_list):
     Y_total = []
     Y_smooth_total = []
 
+    shift_vol = None
+    i0 = max(0, fconn.i0s[stimulations_idx[0]])  # start of the stimulation
+    i1 = fconn.i1s[stimulations_idx[0]]         # end of the stimulation
+    shift_vol = fconn.shift_vols[0]
+    time_plt = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  
+    time_plt_len = len(time_plt)
+    
+    time_fit = np.arange(time_plt_len- shift_vol) * fconn.Dt  
+    time_fit_len = len(time_fit)
+
+
     for ie in stimulations_idx:  # stimulation index only though cases which the most stimulated neuron is stimulated
         responding_ie = fconn.resp_neurons_by_stim[ie]
-        
+        i0 = max(0, fconn.i0s[ie])  # start of the stimulation
+        i1 = fconn.i1s[ie]         # end of the stimulation
+   
         #########################################
         # CASES IN WHICH TO SKIP THIS STIMULATION
         #########################################
@@ -367,27 +382,17 @@ for (i_folder, folder) in enumerate(ds_list):
 
         n_responding_ie = len(responding_ie)
         
-        i0 = max(0, fconn.i0s[ie])  # start of the stimulation
-        i1 = fconn.i1s[ie]         # end of the stimulation
-        shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
-        time = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  # Dt is in seconds, convert time steps to times domain (s)
-        # notice the slice for the signal is based on the stimulated neuron signal only
-
         # Ensure output directory exists
         ie_dir = main_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
         os.makedirs(ie_dir, exist_ok=True)
-
-        i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
-
-        x = time[shift_vol:i1p]
-
+              
         # Determine the range for baseline subtraction. Keep the full shift_vol
         # interval if the neuron was not responding before. But shorten it
         # if the neuron was responding to the previous stimulation. This latter
         # case is more sensitive to the noise, but avoids systematic wrong
         # baselines due to ongoing dynamics in the shift_vol segment.
         """
-        # MUST CONSIDER CORRECTION IF THE RESPONSIVE NEURONS HAVE PREVIOUS STIMULATION ACTIVATION (far from equilibrium), which error it introduces? it imposes linearity?
+        # MUST CONSIDER CORRECTION IF THE RESPONSIVE NEURONS HAVE PREVIOUS STIMULATION ACTIVATION (far from equilibrium), which errors does it introduce? it imposes linearity?
         for neu_i in np.arange(n_responding_ie):
             if ie>0:
                 if neu_i in fconn.resp_neurons_by_stim[ie-1]:
@@ -404,8 +409,8 @@ for (i_folder, folder) in enumerate(ds_list):
                                         baseline_mode="constant")[:,neu_i]#, FIXME FIXME FIXME
                                         #normalize="none")[:,neu_j]
         """
-        Y = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")
-        Y_smooth = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")
+        Y = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")[0:time_plt_len, :]
+        Y_smooth = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")[0:time_plt_len, :]
         """
         for i in range(len(Y_smooth[0])): # Normalize signals
             y = Y_smooth[:, i]
@@ -414,7 +419,7 @@ for (i_folder, folder) in enumerate(ds_list):
         """
         Y_total.append(Y[np.newaxis, ...])  # Add a new axis to ensure 3D structure
         Y_smooth_total.append(Y_smooth[np.newaxis, ...])  # Add a new axis to ensure 3D structure
-        
+    
     if stim not in responding:
         responding.update([stim]) 
 
@@ -435,7 +440,7 @@ for (i_folder, folder) in enumerate(ds_list):
     for i in range(n_responding):
         neu_i = responding[i]
         responses_correlations[i, :, :] = np.corrcoef(
-                    Y_smooth_total[:, shift_vol:i1p, neu_i]
+                    Y_smooth_total[:, shift_vol:, neu_i]
                 )
         # Calculate the standard deviation of the correlation matrix for each neuron
         trial_variations[i] = np.std(responses_correlations[i, :, :])
@@ -489,8 +494,8 @@ for (i_folder, folder) in enumerate(ds_list):
             else:
                 color, lw = "gray", 1  # Non-responsive neurons
 
-            ax.plot(time, Y_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.7)
-            ax_smooth.plot(time, Y_smooth_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.7)  # Corrected to use smoothed data
+            ax.plot(time_plt, Y_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.7)
+            ax_smooth.plot(time_plt, Y_smooth_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.7)  # Corrected to use smoothed data
 
         # Create custom legend handles
         stim_handle = mlines.Line2D([], [], color="red", linewidth=2.5, label="Stimulated")
@@ -512,10 +517,10 @@ for (i_folder, folder) in enumerate(ds_list):
 
         # Mark key time points with vertical lines
         ax.axvline(0, color="k", alpha=0.5, linestyle="--")  # Stimulation onset
-        ax.axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, color="k", alpha=0.5, linestyle="--")
+        #ax.axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, color="k", alpha=0.5, linestyle="--")
 
         ax_smooth.axvline(0, color="k", alpha=0.5, linestyle="--")  # Stimulation onset
-        ax_smooth.axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, color="k", alpha=0.5, linestyle="--")
+        #ax_smooth.axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, color="k", alpha=0.5, linestyle="--")
 
         # Set y-limits (before tight_layout)
         ax.set_ylim(-31, 31)
@@ -540,40 +545,26 @@ for (i_folder, folder) in enumerate(ds_list):
     # Compute NEGF
     ############################################################################################################
     # Compute the direct NEGF kernel
-    # Initialize the NEGF kernel class
-    
+    # Initialize the NEGF kernel class parameters
+
     nonlin_kernel = nlfc.models.LIF(
-        Vs = Y_smooth_total[0, shift_vol:i1p, responding],  # Membrane potential dynamics (sliced signals)
-        num_neurons = n_responding,
-        gamma_g = gamma_g, 
-        gamma_s = gamma_s, 
-        gamma = Gcell/Ci, 
-        C = Ci,  
-        beta= beta,  
-        E_c = Ecell, 
-        E_s = Es, 
-        a_r = ar, 
-        a_d = ad, 
-        dt = fconn.Dt,
-        #ts=x,
-        Veq= Y_smooth_total[0, shift_vol, responding]
+        time_len=time_fit_len,
+        dt=fconn.Dt,
+        num_neurons=n_responding,
+        gamma_g=gamma_g, 
+        gamma_s=gamma_s, 
+        gamma=Gcell / Ci, 
+        C=Ci,  
+        beta=beta,  
+        E_c=Ecell, 
+        E_s=Es, 
+        a_r=ar, 
+        a_d=ad, 
     )
-    
-    # g = nonlin_kernel.compute_direct_negf() 
-    nonlin_kernel.fit(Y_smooth_total[:, shift_vol:i1p, responding])
     G_degree = 2
     for ie_idx, ie in enumerate(stimulations_idx):
 
-        i0 = max(0, fconn.i0s[ie])  # start of the stimulation
-        i1 = fconn.i1s[ie]         # end of the stimulation
-        shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
-
-        i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
-
-        time = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  # Dt is in seconds, convert time steps to times domain (s)
-        x = time[shift_vol:i1p]
-
-        g, Y_nonlin_fit[ie_idx] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx, shift_vol:i1p, responding], return_estimated_V=True)
+        g = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], return_estimated_V=False)
         G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
         # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
         for i in range(n_responding):
@@ -581,13 +572,35 @@ for (i_folder, folder) in enumerate(ds_list):
             neu_j = stim
             if np.all(g[1:, 1:, i, 0] == 0.0) : continue
             #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-            nlfc.utils.plots.time_level_curves(x, g[:, :, i, 0], g[-1, :, i, 0], os.path.join(ie_dir,f'negf_direct_g_neurons_neuron_pair_{i}_{0}.png'))
+            nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, 0], g[-1, :, i, 0], os.path.join(ie_dir,f'before_fit_negf_direct_g_neurons_neuron_pair_{i}_{0}.png'))
 
         for i in range(n_responding):
             neu_i = responding[i]
             neu_j = stim
             if np.all(G[1:, 1:, i, 0] == 0.0) : continue
-            nlfc.utils.plots.t_t_heatmap(x, G[:, :, i, 0j], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{0}_stimulation_{str(ie)}.png'))
+            nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'before_fit_negf_G{G_degree}_heatmap_neuron_pair_{i}_{0}_stimulation_{str(ie)}.png'))
+
+        
+    # g = nonlin_kernel.compute_direct_negf() 
+    print("NEGF fitting")
+    p = nonlin_kernel.fit(Y_smooth_total[:, shift_vol:, responding])
+    for ie_idx, ie in enumerate(stimulations_idx):
+
+        g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], return_estimated_V=True)
+        G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
+        # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
+        for i in range(n_responding):
+            neu_i = responding[i]
+            neu_j = stim
+            if np.all(g[1:, 1:, i, 0] == 0.0) : continue
+            #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+            nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, 0], g[-1, :, i, 0], os.path.join(ie_dir,f'negf_direct_g_neurons_neuron_pair_{i}_{0}.png'))
+
+        for i in range(n_responding):
+            neu_i = responding[i]
+            neu_j = stim
+            if np.all(G[1:, 1:, i, 0] == 0.0) : continue
+            nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0j], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{0}_stimulation_{str(ie)}.png'))
     
             
 
@@ -634,19 +647,10 @@ for (i_folder, folder) in enumerate(ds_list):
         for ie_idx, ie in enumerate(stimulations_idx):
             stim_color = color_map(ie_idx)  # Get a distinct color for each ie plot line
 
-            i0 = max(0, fconn.i0s[ie])  # start of the stimulation
-            i1 = fconn.i1s[ie]         # end of the stimulation
-            shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
-
-            i1p = shift_vol+fconn.next_stim_after_n_vol[ie]
-
-            time = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  # Dt is in seconds, convert time steps to times domain (s)
-            x = time[shift_vol:i1p]
-
             y_plt = Y_total[ie_idx, :,neu_i]
-            y = Y_total[ie_idx, :,neu_i][shift_vol:i1p]
+            y = Y_total[ie_idx, :,neu_i][shift_vol:]
             y_smooth_plt = Y_smooth_total[ie_idx, :,neu_i]
-            y_smooth = Y_smooth_total[ie_idx, :,neu_i][shift_vol:i1p]
+            y_smooth = Y_smooth_total[ie_idx, :,neu_i][shift_vol:]
 
             # Get the unconstrained parameters to build a cleaned-up version of the stimulated neuron's activity (FOR LIN KERNEL)
             stim_unc_par_dict = fconn.fit_params_unc[ie][stim]
@@ -663,7 +667,7 @@ for (i_folder, folder) in enumerate(ds_list):
             fconn.clear_fit_results(stim=ie,neu=neu_i,mode="constrained")
             
             params_, n_branch_params, _ = fconn.fit_eci_branching(
-                            x,y_smooth,stim_y,dt=fconn.Dt,
+                            time_fit,y_smooth,stim_y,dt=fconn.Dt,
                             n_hops_min=2,n_hops_max=3,
                             n_branches_max=2,#3,
                             rms_limits=[None,None],auto_stop=True,rms_tol=1e-2,
@@ -684,7 +688,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
             params = fconn.get_irrarray_from_params(params_dict)
             
-            k_trial = pp.Fconn.eci(x,params)
+            k_trial = pp.Fconn.eci(time_fit,params)
             k.append(k_trial)
 
             fit_y_trial =  pp.convolution(stim_y, k_trial, fconn.Dt,8)
@@ -706,22 +710,22 @@ for (i_folder, folder) in enumerate(ds_list):
 
             elif neu_i == most_variable_neuron:
                 ax2[1].set_title(panel_title, fontsize=10)
-                ax2[1].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-                ax2[1].plot(x, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
+                ax2[1].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+                ax2[1].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
                 #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
-                ax2[1].set_xlim(time[0], time[-1])
+                ax2[1].set_xlim(time_plt[0], time_plt[-1])
                 ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
-                ax2[1].plot(x, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c="r")
+                ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c="r")
                 ax2[1].axvline(0, c="k", alpha=0.5)
 
-            ax[ax_r, ax_c].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-            ax[ax_r, ax_c].plot(x, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
+            ax[ax_r, ax_c].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+            ax[ax_r, ax_c].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
 
             #rf_plt = rf
             #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
             stim_y_plt = stim_y / np.sum(stim_y) * np.abs(np.sum(y))
 
-            ax[ax_r, ax_c].plot(x, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c="r")
+            ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c="r")
             # ax[ax_r, ax_c].plot(x, rf_plt, label="rf", lw=2, c="k")
             # ax[ax_r, ax_c].plot(x, stim_y_plt, label=f"st stimulation {ie}", lw=2, c=stim_color, alpha=0.6)
 
@@ -747,14 +751,14 @@ for (i_folder, folder) in enumerate(ds_list):
         fit_lbl = "Av. kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
         if neu_i == stim:
             panel_title = "Stimulated "+ panel_title
-            ax2[0].plot(x, stim_y, label="Filtered Stim.", c='yellow', lw=1)
+            ax2[0].plot(time_fit, stim_y, label="Filtered Stim.", c='yellow', lw=1)
             ax2[0].legend()
         elif neu_i == most_variable_neuron:
-            ax2[1].plot(x, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
+            ax2[1].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
             ax2[1].legend()
-        ax[ax_r, ax_c].plot(x, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
+        ax[ax_r, ax_c].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
 
-        ax[ax_r, ax_c].set_xlim(time[0], time[-1])
+        ax[ax_r, ax_c].set_xlim(time_plt[0], time_plt[-1])
         ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
         ax[ax_r, ax_c].axvline(0, c="k", alpha=0.8)
 

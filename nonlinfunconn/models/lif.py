@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional, Tuple, Union
 from scipy.optimize import minimize, least_squares
+from tqdm import tqdm
 
 from nonlinfunconn import convolution
 from ..utils.nontt_conv import  nontt_conv
@@ -14,8 +15,8 @@ class LIF():
     
     def __init__(
         self,
-        ts: np.ndarray = None,
-        dt: float = 1.0,
+        time_len,
+        dt,
         num_neurons: int = None,
         Veq: Union[float, np.ndarray] = None,  # Equilibrium membrane potential
         Seq: Union[float, np.ndarray] = None,  # Equilibrium synaptic state
@@ -44,14 +45,12 @@ class LIF():
         if num_neurons is None:
             raise ValueError("num_neurons must be specified.")
         
+        self.time_len = time_len
         self.dt = dt
+
         self.num_neurons = num_neurons
         
-        # Ensure resolution can be determined
-        self.Vs = Vs if Vs is not None else np.zeros((self.resolution, num_neurons))
-        self.resolution = self.Vs.shape[0]
-        
-        self.ts = ts if ts is not None else np.arange(0, self.resolution * self.dt, self.dt)
+        self.ts = np.arange(0, self.time_len * self.dt, self.dt)
         
 
         # Expand parameters to appropriate shapes
@@ -81,23 +80,29 @@ class LIF():
         else:
             self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
 
-        # Initialize synaptic state
-        self.Ss = Ss if Ss is not None else np.full((self.resolution, num_neurons, num_neurons), self.Seq)
-        # Compute deviations from equilibrium states
-
-        self.delta_Vs = self.Vs - self.Veq[None, :]
-        self.delta_Ss = self.Ss - self.Seq[None, :, :]
-        
         # Initialize Green's function arrays
-        shape = (self.resolution, self.resolution, num_neurons, num_neurons)
-        self.sigma0 = np.zeros(shape)
-        self.gg0 = np.zeros_like(self.sigma0)
-        self.gs0 = np.zeros_like(self.sigma0)
-        self.g0 = np.zeros_like(self.sigma0)
-        self.sigma = np.zeros_like(self.sigma0)
-        self.pi = np.zeros_like(self.sigma0)
-        self.g = np.zeros_like(self.sigma0)
-        self.G = np.zeros_like(self.g)
+        green_functions_shape = (self.time_len, self.time_len, num_neurons, num_neurons)
+        V_shape = (self.time_len, num_neurons)
+        S_shape = (self.time_len, num_neurons, num_neurons)
+
+        self.sigma0 = np.zeros(green_functions_shape)
+        self.gg0 = np.zeros(green_functions_shape)
+        self.gs0 = np.zeros(green_functions_shape)
+        self.g0 = np.zeros(green_functions_shape)
+        self.sigma = np.zeros(green_functions_shape)
+        self.pi = np.zeros(green_functions_shape)
+        self.g = np.zeros(green_functions_shape)
+        self.G = np.zeros(green_functions_shape)
+
+        self.V = np.zeros(V_shape)
+        
+        self.delta_Vs = np.zeros(V_shape)
+
+        self.Ss = np.zeros(S_shape)
+        self.delta_Ss = np.zeros(S_shape)
+
+        # Synaptic state dynamics is hidden, so the model estimates it. the initial guess is the equilibrium value
+        self.Ss = np.repeat(self.Seq[np.newaxis, :, :], self.time_len, axis=0)  # Initialize synaptic state dynamics for iterative approximation
         
         # Flags for computation tracking
         self.g_computed_flag = False
@@ -278,7 +283,6 @@ class LIF():
 
                 conv_s = nontt_conv(self.gs0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
                 self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
-                
         return self.g0
 
     def compute_direct_negf(self, Vs, p: np.ndarray = None, dt : float = 1.0, iteration_index_MAX=5, return_estimated_V=False):
@@ -303,15 +307,11 @@ class LIF():
 
         self.g_computed_flag = True
         self.Veq = Vs[0,:]
-        self.resolution = Vs.shape[0]
+        
         self.Vs = Vs
-        self.dt = dt
         self.delta_Vs = self.Vs - self.Veq[None, :]
 
         if self.g_eq_computed_flag==False: _ = self.compute_direct_equilibrium_green_functions()
-
-        self.Ss = np.full((self.resolution, self.num_neurons, self.num_neurons), self.Seq)  # Initialize synaptic state dynamics for iterative approximation
-        self.delta_Ss = self.Ss - self.Seq[None, :, :]
         
         for i in range(self.num_neurons):
             for j in range(self.num_neurons):
@@ -324,27 +324,29 @@ class LIF():
                 )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
 
                 for _ in range(iteration_index_MAX):  # Iterative approximation for self consistent series approximation
+                    
                     self.sigma[:, :, i, j] = (
                         self.sigma0[:, :, i, j] / 
-                        self.d_synaptic_activation(self.Veq[j]*np.ones((self.resolution)), self.beta[i, j], self.Vth[i, j])[None, :] * 
-                        synaptic_diff[None, :] * (1 - (self.delta_Ss[None, :, i, j] / (1 - self.Seq[i, j])))
+                        self.d_synaptic_activation(self.Veq[j] * np.ones((self.time_len)), self.beta[i, j], self.Vth[i, j])[None, :] * 
+                        synaptic_diff[None, :] * (1 - (self.delta_Ss[:, i, j] / (1 - self.Seq[i, j])))
                     )
 
                     self.delta_Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
 
                 self.pi[:, :, i, j] = nontt_conv(
                     self.gs0[:, :, i, j], 
-                    (1 - (self.delta_Vs[None, :, i] / (self.E_s[i, j] - self.Veq[i]))) *  self.sigma[:, :, i, j], self.dt
+                    (1 - (self.delta_Vs[:, i, None] / (self.E_s[i, j] - self.Veq[i]))) * self.sigma[:, :, i, j], self.dt
                 )
                 self.g[:, :, i, j] = self.gg0[:, :, i, j] + self.pi[:, :, i, j]
 
         self.G = np.copy(self.g)  # First approximation for effective Green's function
 
         if return_estimated_V:
-            est_V = self.Veq # in the future change for V0
+            est_V = np.zeros_like(self.Vs) 
             for i in range(self.num_neurons):
+                est_V[:,i] += self.Veq[i] * np.ones((self.time_len))
                 for j in range(self.num_neurons):
-                    est_V[i] += nontt_conv(self.g[:, :, i, j], self.delta_Vs)
+                    est_V[:,i] += nontt_conv(self.g[:, :, i, j], self.delta_Vs[:, j], self.dt)
             
             return self.g , est_V
         else:
@@ -438,7 +440,16 @@ class LIF():
         if routine == "minimize":
             res = minimize(error, p0, args=(Y, Y), method='trf')
         elif routine == "least_squares":
-            res = least_squares(error, p0, args=(Y, Y), method='trf')
+            res = least_squares(
+                error, 
+                p0, 
+                args=(Y, Y), 
+                method='trf', 
+                xtol=rms_tol, 
+                ftol=rms_tol, 
+                gtol=rms_tol,
+                verbose=2,
+            )
         else:
             raise ValueError(f"Invalid routine '{routine}'. Choose 'minimize' or 'least_squares'.")
 

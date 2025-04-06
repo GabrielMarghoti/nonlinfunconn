@@ -144,13 +144,8 @@ funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
                                  ds_tags=ds_tags,ds_exclude_tags=ds_exclude_tags,
                                  verbose=False)
 
-#occ1,occ2 = funa.get_occurrence_matrix(req_auto_response=True)
-#occ3 = funa.get_observation_matrix(req_auto_response=True)
-#km = funa.get_kernels_map(occ2,occ3,filtered=True,include_flat_kernels=False)
-
-
-#aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
-#num_neurons = aconn_chem.shape[0]
+aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
+num_neurons = aconn_chem.shape[0]
 
 
 ############################################################################################################################################
@@ -162,24 +157,6 @@ f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/params.json','r')
 params = json.load(f)
 f.close()
 
-f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/aconnectome.json','r')
-content = json.load(f)
-Neurotrans_ = np.array(content['chemical_sign'])
-f.close()
-f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/neurons.txt','r')
-neu_id_ = []
-for line in f.readlines():
-    ni = line.split("\t")[1]
-    if ni[-1]=="\n": ni=ni[:-1]
-    neu_id_.append(ni)
-f.close()
-
-# Transfer over the neurotransmitter information to the funatlas reference frame
-Neurotrans = np.ones(funa.n_neurons)
-for i_n in np.arange(len(Neurotrans_)):
-    ai = funa.ids_to_i(neu_id_[i_n])
-    Neurotrans[ai] = Neurotrans_[i_n]
-    
 def get_genetic_prediction():
     #Downlaod the Excel workbook from the paper
     import shutil
@@ -220,27 +197,18 @@ for k in np.arange(len(pre)):
 # Get the composite aconnectome via the Funatlas
 if aconn_ds_i is None:
     Gsyn, Ggap = funa.get_aconnectome_from_file(chem_th=0, gap_th=0, exclude_white=False, average=True)
-    Gsyn, Ggap = Gsyn.T, Ggap.T  # Transpose the adjacency matrices, my default is to have the ost-synaptic neurons index as rows
+    #Gsyn, Ggap = Gsyn.T, Ggap.T  # Transpose the adjacency matrices, my default is to have the post-synaptic neurons index as rows
 else:
     aconn_folder = funa.module_folder
     aconn_fname = funa.aconn_sources[aconn_ds_i]["fname"]
     Gsyn, Ggap = funa._get_aconnectome_witvliet(aconn_folder + aconn_fname)
-    Gsyn, Ggap = Gsyn.T, Ggap.T # Transpose the adjacency matrices, my default is to have the ost-synaptic neurons index as rows
+    #Gsyn, Ggap = Gsyn.T, Ggap.T # Transpose the adjacency matrices, my default is to have the post-synaptic neurons index as rows
 
-# Number of neurons
-num_neurons = len(Neurotrans)
-
-#If non-interacting, set all elements to zero
-"""
-if params['interacting'] == 0:
-    Gsyn[:,:] = 0
-    Ggap[:,:] = 0
-"""
 
 # Cell
 Ci = params['C'] # Membrane capacitance 1 pF
 
-Ci = Ci*500  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
+Ci = Ci*100  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
 
 Gcell = params['Gcell'] # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
@@ -256,6 +224,13 @@ beta = params['beta']/1000 # width of synaptic activation [mV^-1]
 esynexc = params['esynexc']*1000 # reverse potential for excitatory synapses
 esyninh = params['esyninh']*1000 # reverse potential for inhibitory synapses
 
+
+# Build the Esyn array of the synaptic reverse potentials
+# The index is presynaptic neuron, which determines the neurotransmitter and
+# hence the sign of the synapse.
+Esyn = np.ones((funa.n_neurons,funa.n_neurons))*esynexc
+Esyn[sign<0] = esyninh
+
 # Print the parameters
 """
 print(f"Gcell: {Gcell}")
@@ -268,12 +243,6 @@ print(f"beta: {beta}")
 print(f"esynexc: {esynexc}")
 print(f"esyninh: {esyninh}")
 """
-
-# Build the Esyn array of the synaptic reverse potentials
-# The index is presynaptic neuron, which determines the neurotransmitter and
-# hence the sign of the synapse.
-Esyn = np.ones((funa.n_neurons,funa.n_neurons))*esynexc
-Esyn[sign<0] = esyninh
 
 # Iterate over the folders whcih contains each experiment data
 for (i_folder, folder) in enumerate(ds_list):
@@ -296,7 +265,7 @@ for (i_folder, folder) in enumerate(ds_list):
     #sig.median_filter()
 
     #sig.get_smoothed(127,None,3,"sg_causal")
-    sig.smooth(n=120,i=None,poly=7,mode="sg")
+    sig.smooth(n=110,i=None,poly=4,mode="sg")
 
     # Get the neurons coordinates of the reference volume and load the matches
     # to determine what neuron was targeted
@@ -333,9 +302,12 @@ for (i_folder, folder) in enumerate(ds_list):
     # Ensure output directory exists
     main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"_stim_neu_{stim_neuron_label}_{num_stimulations}x/"
     os.makedirs(main_dir, exist_ok=True)
+    
+    ie_dir_list = []
+
 
     # plot neural network complete
-    nlfc.utils.netplots.neural_network((Ggap*ggap/Ci), (Gsyn*gsyn/Ci), Esyn, np.array(labels), os.path.join(main_dir, f'Neural_Network_total.png'))
+    nlfc.utils.netplots.neural_network((Ggap*ggap/Ci), (Gsyn*gsyn/Ci), Esyn, np.array(labels), positions=None, save_path=os.path.join(main_dir, f'Neural_Network_total.png'))
 
     responding = set()  # Initialize a set to store all responding neurons across all ie stimulation loops
     Y_total = []
@@ -385,6 +357,8 @@ for (i_folder, folder) in enumerate(ds_list):
         # Ensure output directory exists
         ie_dir = main_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
         os.makedirs(ie_dir, exist_ok=True)
+
+        ie_dir_list.append(ie_dir)
               
         # Determine the range for baseline subtraction. Keep the full shift_vol
         # interval if the neuron was not responding before. But shorten it
@@ -457,11 +431,43 @@ for (i_folder, folder) in enumerate(ds_list):
     gamma_s = (Gsyn*gsyn/Ci)[responding][:, responding]
     Es = Esyn[responding][:, responding]
     
-    # Plot gamma_g and gamma_s as heatmaps
-    nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, os.path.join(ie_dir, 'gamma_g_gamma_s_heatmaps.png'))
-    # plot neural network
-    nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], os.path.join(ie_dir, f'Neural_Network_responding_only.png'))
-    
+    Y_nonlin_fit = np.zeros_like(Y_smooth_total[:, shift_vol:, responding])
+
+    ##### before fitting
+
+    nonlin_kernel = nlfc.models.LIF(
+        time_len=time_fit_len,
+        dt=fconn.Dt,
+        num_neurons=n_responding,
+        gamma_g=gamma_g, 
+        gamma_s=gamma_s, 
+        gamma=Gcell / Ci, 
+        C=Ci,  
+        beta=beta,  
+        E_c=Ecell, 
+        E_s=Es, 
+        a_r=ar, 
+        a_d=ad, 
+    )
+    G_degree = 2
+    for ie_idx, ie in enumerate(stimulations_idx):
+        g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], return_estimated_V=True)
+        G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors 
+        G0 = nonlin_kernel.compute_effective_negf(nonlin_kernel.g0, G_degree) # until second neighbors
+        
+        # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
+        for i in range(n_responding):
+            for j in range(n_responding):
+                neu_i = responding[i]
+                neu_j = responding[j]
+                if i == 0 or (gamma_g[i, j] == 0 and gamma_s[i, j] == 0): continue
+                #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, j], nonlin_kernel.g0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+            
+                #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'before_fit_negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, G[:, :, i, j], G0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+ 
+        
     ####
     # Plot
     ####
@@ -492,11 +498,17 @@ for (i_folder, folder) in enumerate(ds_list):
             elif neu_j in responding:
                 color, lw = "blue", 2  # Responsive neurons
             else:
-                color, lw = "gray", 1  # Non-responsive neurons
+                color, lw = "gray", 0.5  # Non-responsive neurons
 
-            ax.plot(time_plt, Y_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.7)
-            ax_smooth.plot(time_plt, Y_smooth_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.7)  # Corrected to use smoothed data
-
+            ax.plot(time_plt, Y_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.6)
+            ax_smooth.plot(time_plt, Y_smooth_total[ie_idx, :, neu_j], color=color, linewidth=lw, alpha=0.6)  # Corrected to use smoothed data
+        for i in range(n_responding):
+            neu_i = responding[i]
+            neu_j = stim
+            if np.all(Y_nonlin_fit[ie_idx, :, i] == 0.0) : continue
+            #ax.plot(time_fit, Y_nonlin_fit[ie_idx, :, i], color=color, linewidth=lw, alpha=0.8, ls='--')  # using conectome estimated propagated signals
+            ax_smooth.plot(time_fit, Y_nonlin_fit[ie_idx, :, i], color="blue", linewidth=2, alpha=0.9, ls='--')
+      
         # Create custom legend handles
         stim_handle = mlines.Line2D([], [], color="red", linewidth=2.5, label="Stimulated")
         responsive_handle = mlines.Line2D([], [], color="blue", linewidth=2, label="Responsive")
@@ -531,15 +543,18 @@ for (i_folder, folder) in enumerate(ds_list):
         fig_smooth.tight_layout()
 
         # Save figures with correct filenames
-        fig.savefig(f"{ie_dir}signals_{ie}.png", bbox_inches="tight")
-        fig_smooth.savefig(f"{ie_dir}signals_{ie}_smooth.png", bbox_inches="tight")  # Fixed filename
+        fig.savefig(f"{ie_dir_list[ie_idx]}signals.png", bbox_inches="tight")
+        fig_smooth.savefig(f"{ie_dir_list[ie_idx]}signals_smooth.png", bbox_inches="tight")  # Fixed filename
 
         # Close figures properly
         plt.close(fig)
         plt.close(fig_smooth)
 
-
-    Y_nonlin_fit = np.zeros_like(Y_smooth_total)
+    # Plot gamma_g and gamma_s as heatmaps
+    nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(main_dir, 'gamma_g_gamma_s_heatmaps.png'))
+    # plot neural network
+    nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only.png'))
+    
 
    ############################################################################################################        
     # Compute NEGF
@@ -547,65 +562,30 @@ for (i_folder, folder) in enumerate(ds_list):
     # Compute the direct NEGF kernel
     # Initialize the NEGF kernel class parameters
 
-    nonlin_kernel = nlfc.models.LIF(
-        time_len=time_fit_len,
-        dt=fconn.Dt,
-        num_neurons=n_responding,
-        gamma_g=gamma_g, 
-        gamma_s=gamma_s, 
-        gamma=Gcell / Ci, 
-        C=Ci,  
-        beta=beta,  
-        E_c=Ecell, 
-        E_s=Es, 
-        a_r=ar, 
-        a_d=ad, 
-    )
-    G_degree = 2
-    for ie_idx, ie in enumerate(stimulations_idx):
-
-        g = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], return_estimated_V=False)
-        G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
-        # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
-        for i in range(n_responding):
-            neu_i = responding[i]
-            neu_j = stim
-            if np.all(g[1:, 1:, i, 0] == 0.0) : continue
-            #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-            nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, 0], g[-1, :, i, 0], os.path.join(ie_dir,f'before_fit_negf_direct_g_neurons_neuron_pair_{i}_{0}.png'))
-
-        for i in range(n_responding):
-            neu_i = responding[i]
-            neu_j = stim
-            if np.all(G[1:, 1:, i, 0] == 0.0) : continue
-            nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'before_fit_negf_G{G_degree}_heatmap_neuron_pair_{i}_{0}_stimulation_{str(ie)}.png'))
-
-        
     # g = nonlin_kernel.compute_direct_negf() 
     print("NEGF fitting")
     p = nonlin_kernel.fit(Y_smooth_total[:, shift_vol:, responding])
+
     for ie_idx, ie in enumerate(stimulations_idx):
+        # Ensure output directory exists
+        ie_dir = main_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
+        os.makedirs(ie_dir, exist_ok=True)
 
         g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], return_estimated_V=True)
         G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
+        G0 = nonlin_kernel.compute_effective_negf(nonlin_kernel.g0, G_degree) # until second neighbors
+
         # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
         for i in range(n_responding):
-            neu_i = responding[i]
-            neu_j = stim
-            if np.all(g[1:, 1:, i, 0] == 0.0) : continue
-            #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-            nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, 0], g[-1, :, i, 0], os.path.join(ie_dir,f'negf_direct_g_neurons_neuron_pair_{i}_{0}.png'))
-
-        for i in range(n_responding):
-            neu_i = responding[i]
-            neu_j = stim
-            if np.all(G[1:, 1:, i, 0] == 0.0) : continue
-            nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0j], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{i}_{0}_stimulation_{str(ie)}.png'))
-    
-            
-
-
-
+            for j in range(n_responding):
+                neu_i = responding[i]
+                neu_j = stim
+                if i == 0 or (gamma_g[i, j] == 0 and gamma_s[i, j] == 0): continue
+                #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, j], nonlin_kernel.g0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+                #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, G[:, :, i, j], G0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+ 
 
     ###############
     # PREPARE PANELS PLOT

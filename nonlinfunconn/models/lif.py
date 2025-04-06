@@ -142,7 +142,21 @@ class LIF():
             raise ValueError(
                 f"1D array length {value.shape[0]} does not match either dimension of the target shape {shape}"
             )
-        
+    def get_parameters_array(self):
+            """Flatten and concatenate model parameters into a single vector."""
+            param_list = [getattr(self, attr).flatten() for attr in self.attribute_list]
+            return np.concatenate(param_list)
+
+    def set_parameters(self, p):
+        """Update model attributes from a flattened parameter array."""
+        offset = 0
+        for attr in self.attribute_list:
+            arr = getattr(self, attr)
+            size = arr.size
+            new_vals = p[offset:offset + size].reshape(arr.shape)
+            setattr(self, attr, new_vals)
+            offset += size
+
     def Veq_step(self, V, S):
         """
         Compute the updated membrane potentials self-consistently.
@@ -157,10 +171,21 @@ class LIF():
         # Reshape V for element-wise operations
         V_exp = np.expand_dims(V, axis=0)  # Shape (1, N)
         
+        # Add a small epsilon to prevent division by zero ######## TO REVIEW
+        safe_gamma = self.gamma + 1e-10  
+
+        # Ensure all inputs have valid numerical values (no NaNs or Infs)
+        gamma_s_safe = self.gamma_s#np.nan_to_num(self.gamma_s, nan=0.0, posinf=1e10, neginf=-1e10)
+        gamma_g_safe = self.gamma_g#np.nan_to_num(self.gamma_g, nan=0.0, posinf=1e10, neginf=-1e10)
+        S_safe = S#np.nan_to_num(S, nan=0.0, posinf=1e10, neginf=-1e10)
+        V_exp_safe = V_exp#np.nan_to_num(V_exp, nan=0.0, posinf=1e10, neginf=-1e10)
+        V_safe = V#np.nan_to_num(V, nan=0.0, posinf=1e10, neginf=-1e10)
+        E_s_safe = self.E_s#np.nan_to_num(self.E_s, nan=0.0, posinf=1e10, neginf=-1e10)
+
         # Compute new membrane potential
         Y = self.E_c \
-            - np.sum((self.gamma_s * S / self.gamma) * (V_exp - self.E_s), axis=1) \
-            - np.sum((self.gamma_g / self.gamma) * (V_exp - V[:, None]), axis=1)
+            - np.sum((gamma_s_safe * S_safe / safe_gamma) * (V_exp_safe - E_s_safe), axis=1) \
+            - np.sum((gamma_g_safe / safe_gamma) * (V_exp_safe - V_safe[:, None]), axis=1)
         
         return Y
 
@@ -273,7 +298,6 @@ class LIF():
                 
                 a_r, a_d, beta, Veq, Vth = self.a_r[i, j], self.a_d[i, j], self.beta[i, j], self.Veq[j], self.Vth[i, j]
                 
-                
                 exp_factor_synaptic = np.exp(-ts_diff * (a_d - a_r / (1 + np.exp(-beta * (Veq - Vth)))))
                 synaptic_factor = a_r * (1 - self.Seq[i, j]) * self.d_synaptic_activation(Veq, beta, Vth)
 
@@ -283,6 +307,7 @@ class LIF():
 
                 conv_s = nontt_conv(self.gs0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
                 self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
+        
         return self.g0
 
     def compute_direct_negf(self, Vs, p: np.ndarray = None, dt : float = 1.0, iteration_index_MAX=5, return_estimated_V=False):
@@ -317,13 +342,14 @@ class LIF():
             for j in range(self.num_neurons):
                 if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
                 synaptic_diff = np.zeros_like(self.delta_Vs[:, j])
-                non_zero_indices = np.abs(self.delta_Vs[:, j]) >= 0.0001
+                non_zero_indices = np.abs(self.delta_Vs[:, j]) >= 0.000001
                 synaptic_diff[non_zero_indices] = (
                     self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.Vth[i, j]) - 
                     self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.Vth[i, j])
                 )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
 
                 for _ in range(iteration_index_MAX):  # Iterative approximation for self consistent series approximation
+                                                      # in the future, this should be a while loop with a convergence criterion tol.
                     
                     self.sigma[:, :, i, j] = (
                         self.sigma0[:, :, i, j] / 
@@ -380,84 +406,81 @@ class LIF():
     
         return G
 
+
     def fit(
         self,
         Y: np.ndarray,
         n_neigh_max: int = 2,
         rms_limits: Optional[Tuple[int, int]] = None,
         auto_stop: bool = False,
-        rms_tol: float = 1e-2,
-        method: Optional[str] = 'trf',
-        routine: str = "least_squares",
+        rms_tol: float = 1e-3,
+        max_iters: int = 1000,
+        learning_rate: float = 1e-2,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
         p0: Optional[np.ndarray] = None
     ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
         """
-        Fit the LIF model to the given signal.
-
-        Parameters:
-        - x (np.ndarray): Input data (e.g., stimulus signal).
-        - y (np.ndarray): Target neural activation data (shape: [resolution, num_neurons]).
-        - dt (float): Time step.
-        - n_neigh_max (int): Maximum number of neighbors for fitting (unused).
-        - rms_limits (Optional[Tuple[int, int]]): Time limits for RMS calculation (unused).
-        - auto_stop (bool): Whether to stop fitting early if RMS improvement is below tolerance.
-        - rms_tol (float): Tolerance for early stopping.
-        - method (Optional[str]): Optimization method for `scipy.optimize`.
-        - routine (str): Optimization routine ("minimize" or "least_squares").
-        - p0 (Optional[np.ndarray]): Initial parameter values.
-
-        Returns:
-        - Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]: 
-        Fitted parameters, branch parameters (if applicable), and residuals (if applicable).
+        Fit the model using Adam gradient descent.
         """
-        
+
         n_trials, time_resolution, n_neurons = Y.shape
 
-        # Ensure necessary attributes exist
+        # Check for required attributes
         for attr in self.attribute_list:
             if not hasattr(self, attr):
                 raise AttributeError(f"Missing required class attribute: {attr}")
 
-        # Flatten model parameters for optimization
-        param_list = [getattr(self, attr).flatten() for attr in self.attribute_list]
-        p0 = np.concatenate(param_list) if p0 is None else p0
-        original_params = p0.copy()
+        # Initialize parameters
+        p0 = self.get_parameters_array() if p0 is None else p0
+        #fluctuation_scale = 0.02
+        #p0 += np.random.uniform(-fluctuation_scale, fluctuation_scale, size=p0.shape)
 
-        # Define error function
-        def error(p, X, Y):
-            Y_predicted = np.zeros_like(Y)
+        p = p0.copy()
+        m = np.zeros_like(p)
+        v = np.zeros_like(p)
+
+        def loss(p, X, Y):
+            Y_pred = np.zeros_like(Y)
             err = 0.0
-            for trial_idx in range(X.shape[0]):  # Iterate over trials
-            
-                # Ensure compute_direct_negf is implemented and correct
-                _, Y_predicted[trial_idx, :, :] = self.compute_direct_negf(Vs=X[trial_idx, :, :], p=p, return_estimated_V=True)
-                err += np.sum((Y_predicted[trial_idx, :, :] - Y[trial_idx, :, :]) ** 2)
-            err /= n_trials
-            # Compute squared error
-            return err
+            for trial_idx in range(X.shape[0]):
+                _, Y_pred[trial_idx, :, :] = self.compute_direct_negf(Vs=X[trial_idx], p=p, return_estimated_V=True)
+                err += np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2)
+            return err / n_trials
 
-        # Choose optimization method
-        if routine == "minimize":
-            res = minimize(error, p0, args=(Y, Y), method='trf')
-        elif routine == "least_squares":
-            res = least_squares(
-                error, 
-                p0, 
-                args=(Y, Y), 
-                method='trf', 
-                xtol=rms_tol, 
-                ftol=rms_tol, 
-                gtol=rms_tol,
-                verbose=2,
-            )
-        else:
-            raise ValueError(f"Invalid routine '{routine}'. Choose 'minimize' or 'least_squares'.")
+        def compute_grad(p, X, Y, epsilon=1e-5):
+            grad = np.zeros_like(p)
+            loss_0 = loss(p, X, Y)
+            for i in range(len(p)):
+                p_eps = p.copy()
+                p_eps[i] += epsilon
+                loss_eps = loss(p_eps, X, Y)
+                grad[i] = (loss_eps - loss_0) / epsilon
+            return grad
 
-        # Update class attributes with optimized parameters
-        offset = 0
-        for attr in self.attribute_list:
-            size = getattr(self, attr).size
-            setattr(self, attr, res.x[offset:offset + size].reshape(getattr(self, attr).shape))
-            offset += size
+        prev_loss = float('inf')
+        for t in range(1, max_iters + 1):
+            grad = compute_grad(p, Y, Y)
 
-        return res.x, None, None
+            m = beta1 * m + (1 - beta1) * grad
+            v = beta2 * v + (1 - beta2) * (grad ** 2)
+
+            m_hat = m / (1 - beta1 ** t)
+            v_hat = v / (1 - beta2 ** t)
+
+            p -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
+
+            current_loss = loss(p, Y, Y)
+            if t % 50 == 0 or t == 1:
+                print(f"Iteration {t}, Loss: {current_loss:.6f}")
+
+            if auto_stop and abs(prev_loss - current_loss) < rms_tol:
+                print(f"Early stopping at iteration {t}. Loss improvement < {rms_tol}")
+                break
+            prev_loss = current_loss
+
+        # Update model parameters
+        self.set_parameters(p)
+
+        return p, None, None

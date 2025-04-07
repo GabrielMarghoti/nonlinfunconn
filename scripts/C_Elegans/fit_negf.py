@@ -431,9 +431,13 @@ for (i_folder, folder) in enumerate(ds_list):
     gamma_s = (Gsyn*gsyn/Ci)[responding][:, responding]
     Es = Esyn[responding][:, responding]
     
-    Y_nonlin_fit = np.zeros_like(Y_smooth_total[:, shift_vol:, responding])
+    # Plot gamma_g and gamma_s as heatmaps
+    nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(main_dir, 'gamma_g_gamma_s_heatmaps.png'))
+    # plot neural network
+    nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only.png'))
+    
 
-    ##### before fitting
+    Y_nonlin_fit = np.zeros_like(Y_smooth_total[:, shift_vol:, responding])
 
     nonlin_kernel = nlfc.models.LIF(
         num_neurons=n_responding,
@@ -447,24 +451,16 @@ for (i_folder, folder) in enumerate(ds_list):
         a_d=ad, 
     )
     G_degree = 2
-    for ie_idx, ie in enumerate(stimulations_idx):
-        g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], dt=fconn.Dt, return_estimated_V=True)
-        G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors 
-        G0 = nonlin_kernel.compute_effective_negf(nonlin_kernel.g0, G_degree) # until second neighbors
+    # FIT NEGF
+    # g = nonlin_kernel.compute_direct_negf() 
+    print("NEGF fitting")
         
-        # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
-        for i in range(n_responding):
-            for j in range(n_responding):
-                neu_i = responding[i]
-                neu_j = responding[j]
-                if i == 0 or (gamma_g[i, j] == 0 and gamma_s[i, j] == 0): continue
-                #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, j], nonlin_kernel.g0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-            
-                #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'before_fit_negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, G[:, :, i, j], G0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
- 
-        
+    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+15, responding], dt=fconn.Dt, fit_linear_model=True, max_iters=20)
+    print('FIT DONE')
+
+    # plot neural network after fitting
+    nlfc.utils.netplots.neural_network(nonlin_kernel.gamma_g, nonlin_kernel.gamma_g, nonlin_kernel.E_s, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
+   
     ####
     # Plot
     ####
@@ -547,27 +543,7 @@ for (i_folder, folder) in enumerate(ds_list):
         plt.close(fig)
         plt.close(fig_smooth)
 
-    # Plot gamma_g and gamma_s as heatmaps
-    nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(main_dir, 'gamma_g_gamma_s_heatmaps.png'))
-    # plot neural network
-    nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only.png'))
-    
 
-   ############################################################################################################        
-    # Compute NEGF
-    ############################################################################################################
-    # Compute the direct NEGF kernel
-    # Initialize the NEGF kernel class parameters
-
-    # g = nonlin_kernel.compute_direct_negf() 
-    print("NEGF fitting")
-        
-    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+11, responding], dt=fconn.Dt, fit_linear_model=True, max_iters=20)
-    print('FIT DONE')
-
-    # plot neural network after fitting
-    nlfc.utils.netplots.neural_network(nonlin_kernel.gamma_g, nonlin_kernel.gamma_g, nonlin_kernel.E_s, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
-   
     for ie_idx, ie in enumerate(stimulations_idx):
         # Ensure output directory exists
         ie_dir = main_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"

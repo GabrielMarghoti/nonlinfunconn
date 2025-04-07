@@ -1,11 +1,8 @@
 import numpy as np
 from typing import Optional, Tuple, Union
-from scipy.optimize import minimize, least_squares
-from tqdm import tqdm
 
 from nonlinfunconn import convolution
 from ..utils.nontt_conv import  nontt_conv
-from joblib import Parallel, delayed
 
 
 
@@ -490,13 +487,13 @@ class LIF():
         def compute_grad(p, X, Y, epsilon=1e-3):
             grad = np.zeros_like(p)
             loss_0 = loss(p, X, Y)
-            def compute_single_grad(i):
+
+            for i in range(len(p)):
                 p_eps = p.copy()
                 p_eps[i] += epsilon
                 loss_eps = loss(p_eps, X, Y)
-                return (loss_eps - loss_0) / epsilon
+                grad[i] = (loss_eps - loss_0) / epsilon
 
-            grad = np.array(Parallel(n_jobs=-1)(delayed(compute_single_grad)(i) for i in range(len(p))))
             return grad
 
         prev_loss = float('inf')

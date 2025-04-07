@@ -208,7 +208,7 @@ else:
 # Cell
 Ci = params['C'] # Membrane capacitance 1 pF
 
-Ci = Ci*100  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
+Ci = Ci*1000  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
 
 Gcell = params['Gcell'] # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
@@ -436,13 +436,10 @@ for (i_folder, folder) in enumerate(ds_list):
     ##### before fitting
 
     nonlin_kernel = nlfc.models.LIF(
-        time_len=time_fit_len,
-        dt=fconn.Dt,
         num_neurons=n_responding,
         gamma_g=gamma_g, 
         gamma_s=gamma_s, 
         gamma=Gcell / Ci, 
-        C=Ci,  
         beta=beta,  
         E_c=Ecell, 
         E_s=Es, 
@@ -451,7 +448,7 @@ for (i_folder, folder) in enumerate(ds_list):
     )
     G_degree = 2
     for ie_idx, ie in enumerate(stimulations_idx):
-        g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], return_estimated_V=True)
+        g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], dt=fconn.Dt, return_estimated_V=True)
         G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors 
         G0 = nonlin_kernel.compute_effective_negf(nonlin_kernel.g0, G_degree) # until second neighbors
         
@@ -462,10 +459,10 @@ for (i_folder, folder) in enumerate(ds_list):
                 neu_j = responding[j]
                 if i == 0 or (gamma_g[i, j] == 0 and gamma_s[i, j] == 0): continue
                 #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, j], nonlin_kernel.g0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, j], nonlin_kernel.g0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
             
                 #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'before_fit_negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, G[:, :, i, j], G0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, G[:, :, i, j], G0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
  
         
     ####
@@ -564,14 +561,19 @@ for (i_folder, folder) in enumerate(ds_list):
 
     # g = nonlin_kernel.compute_direct_negf() 
     print("NEGF fitting")
-    p = nonlin_kernel.fit(Y_smooth_total[:, shift_vol:, responding])
+        
+    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+11, responding], dt=fconn.Dt, fit_linear_model=True, max_iters=20)
+    print('FIT DONE')
 
+    # plot neural network after fitting
+    nlfc.utils.netplots.neural_network(nonlin_kernel.gamma_g, nonlin_kernel.gamma_g, nonlin_kernel.E_s, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
+   
     for ie_idx, ie in enumerate(stimulations_idx):
         # Ensure output directory exists
         ie_dir = main_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
         os.makedirs(ie_dir, exist_ok=True)
 
-        g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], return_estimated_V=True)
+        g, Y_nonlin_fit[ie_idx, :, :] = nonlin_kernel.compute_direct_negf(Vs=Y_smooth_total[ie_idx][shift_vol:, responding], dt=fconn.Dt, return_estimated_V=True)
         G = nonlin_kernel.compute_effective_negf(g, G_degree) # until second neighbors
         G0 = nonlin_kernel.compute_effective_negf(nonlin_kernel.g0, G_degree) # until second neighbors
 
@@ -579,12 +581,12 @@ for (i_folder, folder) in enumerate(ds_list):
         for i in range(n_responding):
             for j in range(n_responding):
                 neu_i = responding[i]
-                neu_j = stim
+                neu_j = responding[j]
                 if i == 0 or (gamma_g[i, j] == 0 and gamma_s[i, j] == 0): continue
                 #nlfc.utils.plots.t_t_heatmap(x, g[:, :, i, j], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, j], nonlin_kernel.g0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, g[:, :, i, j], nonlin_kernel.g0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
                 #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, G[:, :, i, j], G0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}_{labels[neu_j]}.png'))
+                nlfc.utils.plots.time_level_curves(time_fit, G[:, :, i, j], G0[-1, :, i, j], os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
  
 
     ###############
@@ -636,14 +638,8 @@ for (i_folder, folder) in enumerate(ds_list):
             stim_unc_par_dict = fconn.fit_params_unc[ie][stim]
             stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
             
-            stim_y = pp.Fconn.eci(x, stim_unc_par)  # stim_y is an exponential kernel
-
-            # Data segmentation based on stimulation window
-            i0 = max(0, fconn.i0s[ie])  # start of the stimulation
-            i1 = fconn.i1s[ie]         # end of the stimulation
-            shift_vol = fconn.shift_vols[ie]  # Negative-time interval (in steps) to consider before each stimulus.
-            # notice the slice for the signal is based on the stimulated neuron signal only
-            
+            stim_y = pp.Fconn.eci(time_fit, stim_unc_par)  # stim_y is an exponential kernel
+  
             fconn.clear_fit_results(stim=ie,neu=neu_i,mode="constrained")
             
             params_, n_branch_params, _ = fconn.fit_eci_branching(
@@ -681,9 +677,9 @@ for (i_folder, folder) in enumerate(ds_list):
                 lbl += "*"
                 lw = 2
                 ax2[0].set_title(panel_title, fontsize=10)
-                ax2[0].plot(time, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
+                ax2[0].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
                 #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
-                ax2[0].set_xlim(time[0], time[-1])
+                ax2[0].set_xlim(time_plt[0], time_plt[-1])
                 ax2[0].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
                 ax2[0].axvline(0, c="k", alpha=0.5)
                 #ax2[0].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
@@ -695,7 +691,7 @@ for (i_folder, folder) in enumerate(ds_list):
                 #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                 ax2[1].set_xlim(time_plt[0], time_plt[-1])
                 ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
-                ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c="r")
+                ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls='--', c=stim_color)
                 ax2[1].axvline(0, c="k", alpha=0.5)
 
             ax[ax_r, ax_c].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
@@ -705,7 +701,7 @@ for (i_folder, folder) in enumerate(ds_list):
             #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
             stim_y_plt = stim_y / np.sum(stim_y) * np.abs(np.sum(y))
 
-            ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c="r")
+            ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c=stim_color)
             # ax[ax_r, ax_c].plot(x, rf_plt, label="rf", lw=2, c="k")
             # ax[ax_r, ax_c].plot(x, stim_y_plt, label=f"st stimulation {ie}", lw=2, c=stim_color, alpha=0.6)
 

@@ -15,8 +15,6 @@ class LIF():
     
     def __init__(
         self,
-        time_len,
-        dt,
         num_neurons: int = None,
         Veq: Union[float, np.ndarray] = None,  # Equilibrium membrane potential
         Seq: Union[float, np.ndarray] = None,  # Equilibrium synaptic state
@@ -31,7 +29,6 @@ class LIF():
         E_s: Union[float, np.ndarray] = 0.0,  # Synaptic reversal potential
         a_r: Union[float, np.ndarray] = 1.0,  # Synaptic rise time constant
         a_d: Union[float, np.ndarray] = 5.0,  # Synaptic decay time constant
-        C: Union[float, np.ndarray] = 1.0,  # Membrane capacitance
     ):
         """
         Initialize the LIF model.
@@ -39,19 +36,14 @@ class LIF():
 
         self.attribute_list = [
             "gamma_g", "gamma_s", "gamma", "beta", "Vth",
-            "E_c", "E_s", "a_r", "a_d", "C"
+            "E_c", "E_s", "a_r", "a_d"
         ]
         
         if num_neurons is None:
             raise ValueError("num_neurons must be specified.")
         
-        self.time_len = time_len
-        self.dt = dt
 
         self.num_neurons = num_neurons
-        
-        self.ts = np.arange(0, self.time_len * self.dt, self.dt)
-        
 
         # Expand parameters to appropriate shapes
         self.gamma_g = self._expand_to_array(gamma_g, (num_neurons, num_neurons))
@@ -62,7 +54,6 @@ class LIF():
         self.a_d = self._expand_to_array(a_d, (num_neurons, num_neurons))
         self.gamma = self._expand_to_array(gamma, num_neurons)
         self.E_c = self._expand_to_array(E_c, num_neurons)
-        self.C = self._expand_to_array(C, num_neurons)
         
         # find Vth as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
         _Veq, _Seq = self.find_eq_self_consistent()#self.find_equilibrium(np.zeros((num_neurons)))
@@ -80,33 +71,9 @@ class LIF():
         else:
             self.Seq = self._expand_to_array(Seq, (num_neurons, num_neurons))
 
-        # Initialize Green's function arrays
-        green_functions_shape = (self.time_len, self.time_len, num_neurons, num_neurons)
-        V_shape = (self.time_len, num_neurons)
-        S_shape = (self.time_len, num_neurons, num_neurons)
-
-        self.sigma0 = np.zeros(green_functions_shape)
-        self.gg0 = np.zeros(green_functions_shape)
-        self.gs0 = np.zeros(green_functions_shape)
-        self.g0 = np.zeros(green_functions_shape)
-        self.sigma = np.zeros(green_functions_shape)
-        self.pi = np.zeros(green_functions_shape)
-        self.g = np.zeros(green_functions_shape)
-        self.G = np.zeros(green_functions_shape)
-
-        self.V = np.zeros(V_shape)
-        
-        self.delta_Vs = np.zeros(V_shape)
-
-        self.Ss = np.zeros(S_shape)
-        self.delta_Ss = np.zeros(S_shape)
-
-        # Synaptic state dynamics is hidden, so the model estimates it. the initial guess is the equilibrium value
-        self.Ss = np.repeat(self.Seq[np.newaxis, :, :], self.time_len, axis=0)  # Initialize synaptic state dynamics for iterative approximation
-        
         # Flags for computation tracking
-        self.g_computed_flag = False
-        self.g_eq_computed_flag = False
+        #self.g_computed_flag = False
+        #elf.g_eq_computed_flag = False
 
     def _expand_to_array(self, value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np.ndarray:   #### This must be an .util method
         """
@@ -281,10 +248,30 @@ class LIF():
         exp_term = np.exp(-beta * (V - Vth))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
-    def compute_direct_equilibrium_green_functions(self):
-        self.g_eq_computed_flag = True 
+    def compute_direct_equilibrium_green_functions(self, num_neurons=None ,time_len=None, dt=None, p: np.ndarray = None):
 
+        self.time_len = time_len if time_len is not None else self.time_len
+        self.num_neurons = num_neurons if num_neurons is not None else self.num_neurons
+        self.dt = dt if dt is not None else self.dt
+        
+        green_functions_shape = (self.time_len, self.time_len, self.num_neurons, self.num_neurons)
+        # Initialize Green's function arrays
+        self.sigma0 = np.zeros(green_functions_shape)
+        self.gg0 = np.zeros(green_functions_shape)
+        self.gs0 = np.zeros(green_functions_shape)
+        self.g0 = np.zeros(green_functions_shape)
+
+        self.ts = np.arange(0, self.time_len * self.dt, self.dt)
+
+        # Update class attributes with optimized parameters
+        if p is not None:
+            offset = 0
+            for attr in self.attribute_list:
+                size = getattr(self, attr).size
+                setattr(self, attr, p[offset:offset + size].reshape(getattr(self, attr).shape))
+                offset += size
         ts_diff = self.ts[:, np.newaxis] - self.ts
+
         heaviside_func = self.heaviside(ts_diff)
 
         gamma_sum = self.gamma[:, np.newaxis] + np.sum(self.gamma_g, axis=1)[:, np.newaxis] + np.sum(self.gamma_s * self.Seq, axis=1)[:, np.newaxis]
@@ -308,9 +295,10 @@ class LIF():
                 conv_s = nontt_conv(self.gs0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
                 self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
         
+
         return self.g0
 
-    def compute_direct_negf(self, Vs, p: np.ndarray = None, dt : float = 1.0, iteration_index_MAX=5, return_estimated_V=False):
+    def compute_direct_negf(self, Vs, dt, p: np.ndarray = None, iteration_index_MAX=5, return_estimated_V=False):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -321,6 +309,33 @@ class LIF():
             iteration_index_MAX (int): Maximum number of iterations for the Neumann series approximation.
         """
 
+        self.time_len = len(Vs)
+        self.num_neurons = Vs.shape[1]
+        self.dt = dt if dt is not None else self.dt
+        
+        self.ts = np.arange(0, self.time_len * self.dt, self.dt)
+        
+        # Initialize Green's function arrays
+        green_functions_shape = (self.time_len, self.time_len, self.num_neurons, self.num_neurons)
+        V_shape = (self.time_len, self.num_neurons)
+        S_shape = (self.time_len, self.num_neurons, self.num_neurons)
+
+        self.sigma = np.zeros(green_functions_shape)
+        self.pi = np.zeros(green_functions_shape)
+        self.g = np.zeros(green_functions_shape)
+        self.G = np.zeros(green_functions_shape)
+
+        self.V = np.zeros(V_shape)
+        
+        self.delta_Vs = np.zeros(V_shape)
+
+        self.Ss = np.zeros(S_shape)
+        self.delta_Ss = np.zeros(S_shape)
+
+        # Synaptic state dynamics is hidden, so the model estimates it. the initial guess is the equilibrium value
+        self.Ss = np.repeat(self.Seq[np.newaxis, :, :], self.time_len, axis=0)  # Initialize synaptic state dynamics for iterative approximation
+        
+
         # Update class attributes with optimized parameters
         if p is not None:
             offset = 0
@@ -329,14 +344,12 @@ class LIF():
                 setattr(self, attr, p[offset:offset + size].reshape(getattr(self, attr).shape))
                 offset += size
 
-
-        self.g_computed_flag = True
         self.Veq = Vs[0,:]
         
         self.Vs = Vs
         self.delta_Vs = self.Vs - self.Veq[None, :]
 
-        if self.g_eq_computed_flag==False: _ = self.compute_direct_equilibrium_green_functions()
+        self.compute_direct_equilibrium_green_functions()
         
         for i in range(self.num_neurons):
             for j in range(self.num_neurons):
@@ -410,10 +423,13 @@ class LIF():
     def fit(
         self,
         Y: np.ndarray,
+        dt = None,
+        fit_linear_model: bool = False,
+        fit_param = None,
         n_neigh_max: int = 2,
         rms_limits: Optional[Tuple[int, int]] = None,
-        auto_stop: bool = False,
-        rms_tol: float = 1e-3,
+        auto_stop: bool = True,
+        rms_tol: float = 1e-1,
         max_iters: int = 1000,
         learning_rate: float = 1e-2,
         beta1: float = 0.9,
@@ -425,7 +441,13 @@ class LIF():
         Fit the model using Adam gradient descent.
         """
 
-        n_trials, time_resolution, n_neurons = Y.shape
+        if dt is not None:
+            self.dt = dt
+        else:
+            self.dt = self.dt # use the previous
+            raise ValueError("Time step (dt) must be provided.")
+
+        n_trials, time_len, n_neurons = Y.shape
 
         # Check for required attributes
         for attr in self.attribute_list:
@@ -445,11 +467,24 @@ class LIF():
             Y_pred = np.zeros_like(Y)
             err = 0.0
             for trial_idx in range(X.shape[0]):
-                _, Y_pred[trial_idx, :, :] = self.compute_direct_negf(Vs=X[trial_idx], p=p, return_estimated_V=True)
-                err += np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2)
-            return err / n_trials
+                self.Vs = Y[trial_idx]
+                self.delta_Vs = self.Vs - self.Veq[None, :]
+                if fit_linear_model:
+                    g0 = self.compute_direct_equilibrium_green_functions(num_neurons=n_neurons, time_len=time_len, dt = self.dt, p=p)
+                    est_V = np.zeros((time_len, self.num_neurons)) 
+                    for i in range(self.num_neurons):
+                        est_V[:,i] += self.Veq[i] * np.ones((self.time_len))
+                        for j in range(self.num_neurons):
+                            est_V[:,i] += nontt_conv(g0[:, :, i, j], self.delta_Vs[:, j], self.dt)
+            
+                    Y_pred[trial_idx, :, :] = est_V
+                else:
+                    _, Y_pred[trial_idx, :, :] = self.compute_direct_negf(Vs=X[trial_idx], dt = self.dt, p=p, return_estimated_V=True)
+                    
+                err += np.sqrt(np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2))
+            return err / (n_trials* time_len * n_neurons)
 
-        def compute_grad(p, X, Y, epsilon=1e-5):
+        def compute_grad(p, X, Y, epsilon=1e-3):
             grad = np.zeros_like(p)
             loss_0 = loss(p, X, Y)
             for i in range(len(p)):
@@ -472,7 +507,7 @@ class LIF():
             p -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
 
             current_loss = loss(p, Y, Y)
-            if t % 50 == 0 or t == 1:
+            if t % 10 == 0 or t == 1:
                 print(f"Iteration {t}, Loss: {current_loss:.6f}")
 
             if auto_stop and abs(prev_loss - current_loss) < rms_tol:

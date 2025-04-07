@@ -58,7 +58,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         edge_widths = np.full(len(edge_weights), min_width)  # Default width if all weights are zero
 
     # Define layout
-    pos = positions if positions is not None else nx.spring_layout(G, k=0.8)  # Force-directed layout with increased k value
+    pos = positions if positions is not None else nx.spring_layout(G, k=None)  # Force-directed layout with increased k value
     
     # Calculate node sizes based on connectivity strength
     # Node size is proportional to the sum of weights of incoming and outgoing edges
@@ -68,7 +68,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         node_strengths[j] = np.sum(np.abs(Ggap[:, j])) + np.sum(np.abs(Gsyn[:, j]))
     
     # Normalize node sizes to a reasonable range (e.g., 100 to 1000)
-    min_size, max_size = 500, 2000
+    min_size, max_size = 400, 1000
     if np.max(node_strengths) > 0:
         node_sizes = min_size + (max_size - min_size) * (node_strengths - np.min(node_strengths)) / (np.max(node_strengths) - np.min(node_strengths))
     else:
@@ -98,7 +98,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     # Draw edges with arrows
     nx.draw_networkx_edges(
         G, pos, edge_color=edge_colors, arrows=True, width=edge_widths,
-        arrowstyle='->', arrowsize=15  # Adjust arrow size and style here
+        arrowstyle='->', arrowsize=20  # Adjust arrow size and style here
     )
 
     # Draw labels if provided

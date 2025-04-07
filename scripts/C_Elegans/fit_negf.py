@@ -687,7 +687,7 @@ for (i_folder, folder) in enumerate(ds_list):
             elif neu_i == most_variable_neuron:
                 ax2[1].set_title(panel_title, fontsize=10)
                 ax2[1].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-                ax2[1].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
+                #ax2[1].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
                 #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                 ax2[1].set_xlim(time_plt[0], time_plt[-1])
                 ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
@@ -695,7 +695,7 @@ for (i_folder, folder) in enumerate(ds_list):
                 ax2[1].axvline(0, c="k", alpha=0.5)
 
             ax[ax_r, ax_c].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-            ax[ax_r, ax_c].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
+            #ax[ax_r, ax_c].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
 
             #rf_plt = rf
             #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))

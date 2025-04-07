@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 from nonlinfunconn import convolution
 from ..utils.nontt_conv import  nontt_conv
+from joblib import Parallel, delayed
 
 
 
@@ -425,11 +426,11 @@ class LIF():
         Y: np.ndarray,
         dt = None,
         fit_linear_model: bool = False,
-        fit_param = None,
+        parameter_to_fit_list = None,
         n_neigh_max: int = 2,
         rms_limits: Optional[Tuple[int, int]] = None,
         auto_stop: bool = True,
-        rms_tol: float = 1e-1,
+        rms_tol: float = 1e-3,
         max_iters: int = 1000,
         learning_rate: float = 1e-2,
         beta1: float = 0.9,
@@ -450,7 +451,9 @@ class LIF():
         n_trials, time_len, n_neurons = Y.shape
 
         # Check for required attributes
-        for attr in self.attribute_list:
+        parameter_to_fit_list = self.attribute_list if parameter_to_fit_list is None else parameter_to_fit_list
+
+        for attr in parameter_to_fit_list:
             if not hasattr(self, attr):
                 raise AttributeError(f"Missing required class attribute: {attr}")
 
@@ -480,18 +483,20 @@ class LIF():
                     Y_pred[trial_idx, :, :] = est_V
                 else:
                     _, Y_pred[trial_idx, :, :] = self.compute_direct_negf(Vs=X[trial_idx], dt = self.dt, p=p, return_estimated_V=True)
-                    
+
                 err += np.sqrt(np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2))
             return err / (n_trials* time_len * n_neurons)
 
         def compute_grad(p, X, Y, epsilon=1e-3):
             grad = np.zeros_like(p)
             loss_0 = loss(p, X, Y)
-            for i in range(len(p)):
+            def compute_single_grad(i):
                 p_eps = p.copy()
                 p_eps[i] += epsilon
                 loss_eps = loss(p_eps, X, Y)
-                grad[i] = (loss_eps - loss_0) / epsilon
+                return (loss_eps - loss_0) / epsilon
+
+            grad = np.array(Parallel(n_jobs=-1)(delayed(compute_single_grad)(i) for i in range(len(p))))
             return grad
 
         prev_loss = float('inf')

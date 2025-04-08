@@ -402,8 +402,18 @@ for (i_folder, folder) in enumerate(ds_list):
     responding.remove(stim)
     responding.insert(0, stim)
 
-    n_responding = len(responding)
+    # Consider only second order neighbors of stimulated node
 
+    first_neighbors = np.where(Ggap[:, stim] > 0 or Gsyn[:, stim] > 0)[0]
+    second_neighbors = np.where(np.sum(Ggap[:, first_neighbors], axis=1) > 0 or np.sum(Gsyn[:, first_neighbors], axis=1) > 0)[0]
+
+    for i in range(1, responding):
+        if responding[i] not in first_neighbors and responding[i] not in second_neighbors:
+            responding.remove(responding[i])
+    
+    
+    n_responding = len(responding)
+    if n_responding>15: continue
     Y_total = np.concatenate(Y_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
     Y_smooth_total = np.concatenate(Y_smooth_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
 
@@ -455,7 +465,7 @@ for (i_folder, folder) in enumerate(ds_list):
     # g = nonlin_kernel.compute_direct_negf() 
     print("NEGF fitting")
         
-    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+15, responding], dt=fconn.Dt, fit_linear_model=True, max_iters=20)
+    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+16, responding], dt=fconn.Dt, fit_linear_model=True, max_iters=20)
     print('FIT DONE')
 
     # plot neural network after fitting

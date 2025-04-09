@@ -1,5 +1,7 @@
 import numpy as np
 from typing import Optional, Tuple, Union
+import copy
+from joblib import Parallel, delayed
 
 from nonlinfunconn import convolution
 from ..utils.nontt_conv import  nontt_conv
@@ -18,12 +20,15 @@ class LIF():
         Seq: Union[float, np.ndarray] = None,  # Equilibrium synaptic state
         Vs: np.ndarray = None,  # Membrane potential dynamics (time series)
         Ss: np.ndarray = None,  # Synaptic state dynamics (time series)
-        gamma_g: Union[float, np.ndarray] = 10.0,  # Conductance decay rate
-        gamma_s: Union[float, np.ndarray] = 10.0,  # Synaptic decay rate
-        gamma: Union[float, np.ndarray] = 10.0,  # Membrane potential decay rate
-        beta: Union[float, np.ndarray] = 125,  # Inverse synaptic timescale
+        C: Union[float, np.ndarray] = 1e-09,  # Membrane capacitance
+        gamma_g: Union[float, np.ndarray] = 1,  # Conductance decay rate
+        gamma_s: Union[float, np.ndarray] = 1,  # Synaptic decay rate
+        gap_conductance: Union[float, np.ndarray] = 1e-10,  # Gap junction conductance
+        syn_conductance: Union[float, np.ndarray] = 1e-10,  # Gap junction conductance
+        gamma: Union[float, np.ndarray] = 1e-11,  # Membrane potential decay rate
+        beta: Union[float, np.ndarray] = 0.125,  # Inverse synaptic timescale
         Vth: Union[float, np.ndarray] = None,  # Threshold potential for spiking
-        E_c: Union[float, np.ndarray] = 0.0,  # Equilibrium membrane potential
+        E_c: Union[float, np.ndarray] = -60.0,  # Equilibrium membrane potential
         E_s: Union[float, np.ndarray] = 0.0,  # Synaptic reversal potential
         a_r: Union[float, np.ndarray] = 1.0,  # Synaptic rise time constant
         a_d: Union[float, np.ndarray] = 5.0,  # Synaptic decay time constant
@@ -33,7 +38,7 @@ class LIF():
         """
 
         self.attribute_list = [
-            "gamma_g", "gamma_s", "gamma", "beta", "Vth",
+            "gamma_g", "gamma_s", "gap_cond", "syn_cond", "C", "gamma", "beta", "Vth",
             "E_c", "E_s", "a_r", "a_d"
         ]
         
@@ -46,10 +51,13 @@ class LIF():
         # Expand parameters to appropriate shapes
         self.gamma_g = self._expand_to_array(gamma_g, (num_neurons, num_neurons))
         self.gamma_s = self._expand_to_array(gamma_s, (num_neurons, num_neurons))
+        self.gap_cond = self._expand_to_array(gap_conductance, (num_neurons, num_neurons))
+        self.syn_cond = self._expand_to_array(syn_conductance, (num_neurons, num_neurons))
         self.E_s = self._expand_to_array(E_s, (num_neurons, num_neurons))
         self.beta = self._expand_to_array(beta, (num_neurons, num_neurons))
         self.a_r = self._expand_to_array(a_r, (num_neurons, num_neurons))
         self.a_d = self._expand_to_array(a_d, (num_neurons, num_neurons))
+        self.C = self._expand_to_array(C, num_neurons)
         self.gamma = self._expand_to_array(gamma, num_neurons)
         self.E_c = self._expand_to_array(E_c, num_neurons)
         
@@ -107,8 +115,11 @@ class LIF():
             raise ValueError(
                 f"1D array length {value.shape[0]} does not match either dimension of the target shape {shape}"
             )
-    def get_parameters_array(self):
+    def get_parameters_array(self, include_adj_matrix: bool = True) -> np.ndarray:
             """Flatten and concatenate model parameters into a single vector."""
+            if not include_adj_matrix:
+                self.attribute_list.remove("gamma_g")
+                self.attribute_list.remove("gamma_s")
             param_list = [getattr(self, attr).flatten() for attr in self.attribute_list]
             return np.concatenate(param_list)
 
@@ -136,22 +147,10 @@ class LIF():
         # Reshape V for element-wise operations
         V_exp = np.expand_dims(V, axis=0)  # Shape (1, N)
         
-        # Add a small epsilon to prevent division by zero ######## TO REVIEW
-        safe_gamma = self.gamma + 1e-10  
-
-        # Ensure all inputs have valid numerical values (no NaNs or Infs)
-        gamma_s_safe = self.gamma_s#np.nan_to_num(self.gamma_s, nan=0.0, posinf=1e10, neginf=-1e10)
-        gamma_g_safe = self.gamma_g#np.nan_to_num(self.gamma_g, nan=0.0, posinf=1e10, neginf=-1e10)
-        S_safe = S#np.nan_to_num(S, nan=0.0, posinf=1e10, neginf=-1e10)
-        V_exp_safe = V_exp#np.nan_to_num(V_exp, nan=0.0, posinf=1e10, neginf=-1e10)
-        V_safe = V#np.nan_to_num(V, nan=0.0, posinf=1e10, neginf=-1e10)
-        E_s_safe = self.E_s#np.nan_to_num(self.E_s, nan=0.0, posinf=1e10, neginf=-1e10)
-
         # Compute new membrane potential
         Y = self.E_c \
-            - np.sum((gamma_s_safe * S_safe / safe_gamma) * (V_exp_safe - E_s_safe), axis=1) \
-            - np.sum((gamma_g_safe / safe_gamma) * (V_exp_safe - V_safe[:, None]), axis=1)
-        
+            - np.sum((self.gamma_s * S / self.gamma) * (V_exp - self.E_s), axis=1) \
+            - np.sum((self.gamma_g / self.gamma) * (V_exp - V[:, None]), axis=1)
         return Y
 
     def find_eq_self_consistent(self, maxit=100000, damp=1e-3, tol=5e-4):
@@ -207,15 +206,6 @@ class LIF():
         """
         return np.where(t >= 0, 1.0, 0.0)
 
-    def update_V(self,  V: np.ndarray):
-        """
-        Update the membrane potential and synaptic state dynamics.
-
-        Parameters:
-            V (np.ndarray): Membrane potential.
-        """
-        # Compute synaptic activation
-        self.V = V
     
     def synaptic_activation(self, V: np.ndarray, beta: np.ndarray, Vth: np.ndarray) -> np.ndarray:
         """
@@ -272,8 +262,8 @@ class LIF():
 
         heaviside_func = self.heaviside(ts_diff)
 
-        gamma_sum = self.gamma[:, np.newaxis] + np.sum(self.gamma_g, axis=1)[:, np.newaxis] + np.sum(self.gamma_s * self.Seq, axis=1)[:, np.newaxis]
-
+        gamma_sum = (self.gamma/self.C)[:, np.newaxis] + np.sum((self.gamma_g*self.gap_cond/self.C), axis=1)[:, np.newaxis] + np.sum((self.gamma_s*self.syn_cond/self.C) * self.Seq, axis=1)[:, np.newaxis]
+       
         for i in range(self.num_neurons):
             exp_factor_gs_gg = np.exp(-ts_diff * gamma_sum[i])
 
@@ -287,8 +277,8 @@ class LIF():
                 synaptic_factor = a_r * (1 - self.Seq[i, j]) * self.d_synaptic_activation(Veq, beta, Vth)
 
                 self.sigma0[:, :, i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
-                self.gg0[:, :, i, j] = heaviside_func * self.gamma_g[i, j] * exp_factor_gs_gg
-                self.gs0[:, :, i, j] = heaviside_func * self.gamma_s[i, j] * (self.E_s[i, j] - self.Veq[i]) * exp_factor_gs_gg
+                self.gg0[:, :, i, j] = heaviside_func * (self.gamma_g[i, j]*self.gap_cond[i,j]/self.C[i]) * exp_factor_gs_gg
+                self.gs0[:, :, i, j] = heaviside_func * (self.gamma_s[i, j]*self.syn_cond[i,j]/self.C[i]) * (self.E_s[i, j] - self.Veq[i]) * exp_factor_gs_gg
 
                 conv_s = nontt_conv(self.gs0[:, :, i, j], self.sigma0[:, :, i, j], self.dt)
                 self.g0[:, :, i, j] = self.gg0[:, :, i, j] + conv_s
@@ -389,32 +379,43 @@ class LIF():
         else:
             return self.g
 
-    def compute_effective_negf(self, g, max_paths_len: int = 2):
+    def compute_effective_negf(self, g, max_paths_len: int = 2, neuron_pair = "all"):
         """
         Computes the effective non-equilibrium Green's function (NEGF) up to a specified order.
 
         Parameters:
         - max_paths_len: int, maximum path length for effective green function computation. 1 corresponds to direct paths. 2 corresponds to direct and one indirect path (reaches second neighbors).
 
+        - neuron_pair: str, "all" for all neuron pairs or a specific pair (i, j) to compute the effective Green's function from j to i.
+
         Returns:
         - np.ndarray: Effective Green's function matrix
         """
+        if neuron_pair == "all":
+            G = np.copy(g)  # First-order Green's function
+            num_eff_neurons = G.shape[-1]
 
-        G = np.copy(g)  # First-order Green's function
-        num_eff_neurons = G.shape[-1]
+            for _ in range(2, max_paths_len+1):
+                for i in range(num_eff_neurons):
+                    for j in range(num_eff_neurons):
+                        if i==j: continue # Avoids self loops
+                        for k in range(num_eff_neurons):
 
-        for _ in range(2, max_paths_len+1):
-            for i in range(num_eff_neurons):
-                for j in range(num_eff_neurons):
-                    if i==j: continue # Avoids self loops
-                    for k in range(num_eff_neurons):
+                            if np.all(g[:, :, i, k] == 0) or np.all(g[:, :, k, j] == 0):
+                                continue  # Ensure connectivity exists before doing the computation
+                            
+                            # Iterative update of Green's function while preventing revisits
+                            G[:, :, i, j] += nontt_conv(g[:, :, i, k], G[:, :, k, j])
+        else:
+            # for now it only consider second neighbors, review
+            i, j = neuron_pair
+            G = np.copy(g[:, :, i, j])
+            for k in range(self.num_neurons):
+                if np.all(g[:, :, i, k] == 0) or np.all(g[:, :, k, j] == 0):
+                    continue
+                G += nontt_conv(g[:, :, i, k], g[:, :, k, j])
 
-                        if np.all(g[:, :, i, k] == 0) or np.all(g[:, :, k, j] == 0):
-                            continue  # Ensure connectivity exists before doing the computation
-                        
-                        # Iterative update of Green's function while preventing revisits
-                        G[:, :, i, j] += nontt_conv(g[:, :, i, k], G[:, :, k, j])
-    
+        
         return G
 
 
@@ -423,7 +424,8 @@ class LIF():
         Y: np.ndarray,
         dt = None,
         fit_linear_model: bool = False,
-        parameter_to_fit_list = None,
+        include_adj_matrix: bool = True,
+        parameter_to_fit_list: Optional[list] = None,
         n_neigh_max: int = 2,
         rms_limits: Optional[Tuple[int, int]] = None,
         auto_stop: bool = True,
@@ -455,44 +457,46 @@ class LIF():
                 raise AttributeError(f"Missing required class attribute: {attr}")
 
         # Initialize parameters
-        p0 = self.get_parameters_array() if p0 is None else p0
-        #fluctuation_scale = 0.02
-        #p0 += np.random.uniform(-fluctuation_scale, fluctuation_scale, size=p0.shape)
+        p0 = self.get_parameters_array(include_adj_matrix) if p0 is None else p0
 
         p = p0.copy()
         m = np.zeros_like(p)
         v = np.zeros_like(p)
 
-        def loss(p, X, Y):
+        def loss(variant_self, p, X, Y):
             Y_pred = np.zeros_like(Y)
             err = 0.0
             for trial_idx in range(X.shape[0]):
-                self.Vs = Y[trial_idx]
-                self.delta_Vs = self.Vs - self.Veq[None, :]
+                variant_self.Vs = Y[trial_idx]
+                variant_self.delta_Vs = self.Vs - self.Veq[None, :]
                 if fit_linear_model:
-                    g0 = self.compute_direct_equilibrium_green_functions(num_neurons=n_neurons, time_len=time_len, dt = self.dt, p=p)
-                    est_V = np.zeros((time_len, self.num_neurons)) 
-                    for i in range(self.num_neurons):
+                    g0 = variant_self.compute_direct_equilibrium_green_functions(num_neurons=n_neurons, time_len=time_len, dt = self.dt, p=p)
+                    est_V = np.zeros((time_len, variant_self.num_neurons)) 
+                    for i in range(variant_self.num_neurons):
                         est_V[:,i] += self.Veq[i] * np.ones((self.time_len))
-                        for j in range(self.num_neurons):
+                        for j in range(variant_self.num_neurons):
                             est_V[:,i] += nontt_conv(g0[:, :, i, j], self.delta_Vs[:, j], self.dt)
             
                     Y_pred[trial_idx, :, :] = est_V
                 else:
-                    _, Y_pred[trial_idx, :, :] = self.compute_direct_negf(Vs=X[trial_idx], dt = self.dt, p=p, return_estimated_V=True)
+                    _, Y_pred[trial_idx, :, :] = variant_self.compute_direct_negf(Vs=X[trial_idx], dt = self.dt, p=p, return_estimated_V=True)
 
                 err += np.sqrt(np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2))
             return err / (n_trials* time_len * n_neurons)
 
-        def compute_grad(p, X, Y, epsilon=1e-3):
+        def compute_grad(p, X, Y, epsilon=1e-2):
             grad = np.zeros_like(p)
-            loss_0 = loss(p, X, Y)
+            loss_0 = loss(self, p, X, Y)
 
-            for i in range(len(p)):
+            # Adjust epsilon based on the magnitude of each parameter
+            adjusted_epsilon = epsilon * np.maximum(np.abs(p), 1e-4)
+            def compute_single_grad(i):
                 p_eps = p.copy()
-                p_eps[i] += epsilon
-                loss_eps = loss(p_eps, X, Y)
-                grad[i] = (loss_eps - loss_0) / epsilon
+                p_eps[i] += adjusted_epsilon[i]
+                loss_eps = loss(copy.deepcopy(self), p_eps, X, Y)
+                return (loss_eps - loss_0) / adjusted_epsilon[i]
+
+            grad = np.array(Parallel(n_jobs=-1)(delayed(compute_single_grad)(i) for i in range(len(p))))
 
             return grad
 
@@ -508,11 +512,11 @@ class LIF():
 
             p -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
 
-            current_loss = loss(p, Y, Y)
+            current_loss = loss(self, p, Y, Y)
             if t % 10 == 0 or t == 1:
                 print(f"Iteration {t}, Loss: {current_loss:.6f}")
 
-            if auto_stop and abs(prev_loss - current_loss) < rms_tol:
+            if auto_stop and abs(prev_loss - current_loss) < rms_tol and current_loss < 0.1*prev_loss:
                 print(f"Early stopping at iteration {t}. Loss improvement < {rms_tol}")
                 break
             prev_loss = current_loss

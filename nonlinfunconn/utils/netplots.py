@@ -25,17 +25,13 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     
     # Add gap junctions (undirected edges, black)
     for i in range(num_nodes):
-        for j in range(i + 1, num_nodes):  # Avoid double-adding edges
+        for j in range(num_nodes):  # Avoid double-adding edges
             if Ggap[i, j] > 0:
                 G.add_edge(j, i, weight=Ggap[i, j], color='black')
-                G.add_edge(i, j, weight=Ggap[j, i], color='black')
     
     # Normalize Esyn values for colormap scaling
-    if np.any(Esyn):
-        min_val, max_val = np.min(Esyn[Esyn != 0]), np.max(Esyn)
-    else:
-        min_val, max_val = 0, 1  # Default range if Esyn is all zero
-    
+    min_val, max_val = np.min([np.min(Esyn), -1]), np.max([np.max(Esyn), 0]) # -70 to 10 mV
+ 
     norm = mcolors.Normalize(vmin=min_val, vmax=max_val)
     cmap = cm.get_cmap('coolwarm')  # Single colormap ranging from blue to red
     
@@ -44,14 +40,14 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         for j in range(num_nodes):
             if Gsyn[i, j] != 0:  # Only add edges where there is a synaptic connection
                 color = cmap(norm(Esyn[i, j]))
-                G.add_edge(j, i, weight=Gsyn[i, j], color=color)  # 'j' is the origin (source), 'i' is the target (destination)
+                G.add_edge(j, i, weight=Gsyn[i, j], color=color)  # 'j' is the origin (source) to 'i' is the target (destination)
  
     # Get edge colors
     edge_colors = [G[u][v]['color'] for u, v in G.edges()]
     edge_weights = [G[u][v]['weight'] for u, v in G.edges()]
     
     # Normalize edge widths to a reasonable range (e.g., 1 to 10)
-    min_width, max_width = 0.2, 8
+    min_width, max_width = 1, 8
     if np.max(edge_weights) > 0:
         edge_widths = min_width + (max_width - min_width) * (edge_weights - np.min(edge_weights)) / (np.max(edge_weights) - np.min(edge_weights))
     else:
@@ -75,9 +71,9 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         node_sizes = np.full(num_nodes, min_size)  # Default size if all strengths are zero
     # Make the first node have a bold stroke
     node_border_colors = ['black'] * num_nodes
-    node_border_colors[0] = 'red'  # Set the first node's border color to red
+    node_border_colors[0] = 'orange'  # Set the first node's border color to red
     node_border_widths = [1] * num_nodes
-    node_border_widths[0] = 3  # Set the first node's border width to 3
+    node_border_widths[0] = 2  # Set the first node's border width to 3
 
 
     

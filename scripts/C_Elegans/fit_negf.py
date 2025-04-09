@@ -206,18 +206,20 @@ else:
 
 
 # Cell
-Ci = params['C'] # Membrane capacitance 1 pF
+Ci = params['C'] # Membrane capacitance 1 F
 
-Ci = Ci*1000  ############### review, this is necessary for better time scale, otherwise exponentials decrease to fast (the kernel decay is miliseconds)
+Ci = Ci*1e+12  ## kunert Farad for capacitance F what I noticed got numerical problems due to finite-precision of floating-point, so I convert to 1 pF = 1e-12 F
 
-Gcell = params['Gcell'] # Leakage conductance of membrane [pS]
+Ci = Ci*500 # trick to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
+
+Gcell = params['Gcell']*1e+12 # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
 
 # Electrical synapses
-ggap = params['ggap'] # conductivity of electrical synapse [pS]
+ggap = params['ggap']*1e+12 # conductivity of electrical synapse [pS]
 
 # Chemical synapses
-gsyn = params['gsyn'] # "conductivity" of chemical synapse [pS]
+gsyn = params['gsyn']*1e+12 # "conductivity" of chemical synapse [pS]
 ar = params['ar'] # activation rate of synapses [s^-1]
 ad = params['ad'] # deactivation rate of synapses [s^-1]
 beta = params['beta']/1000 # width of synaptic activation [mV^-1]
@@ -231,8 +233,10 @@ esyninh = params['esyninh']*1000 # reverse potential for inhibitory synapses
 Esyn = np.ones((funa.n_neurons,funa.n_neurons))*esynexc
 Esyn[sign<0] = esyninh
 
-# Print the parameters
+# Print the parameters from kunert model
 """
+print("Parameters:")
+print(f"Ci: {Ci}")
 print(f"Gcell: {Gcell}")
 print(f"Ecell: {Ecell}")
 print(f"ggap: {ggap}")
@@ -307,7 +311,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
 
     # plot neural network complete
-    nlfc.utils.netplots.neural_network((Ggap*ggap/Ci), (Gsyn*gsyn/Ci), Esyn, np.array(labels), positions=None, save_path=os.path.join(main_dir, f'Neural_Network_total.png'))
+    nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(main_dir, f'Neural_Network_total.png'))
 
     responding = set()  # Initialize a set to store all responding neurons across all ie stimulation loops
     Y_total = []
@@ -404,13 +408,23 @@ for (i_folder, folder) in enumerate(ds_list):
 
     # Consider only second order neighbors of stimulated node
 
-    first_neighbors = np.where(Ggap[:, stim] > 0 or Gsyn[:, stim] > 0)[0]
-    second_neighbors = np.where(np.sum(Ggap[:, first_neighbors], axis=1) > 0 or np.sum(Gsyn[:, first_neighbors], axis=1) > 0)[0]
+    # Find first neighbors (nodes connected to stim via either gap or syn)
+    first_neighbors = np.where((Ggap[:, stim] > 0) | (Gsyn[:, stim] > 0))[0]
+    responsive_first_neighbors = [first_neighbors[i] for i in range(len(first_neighbors)) if first_neighbors[i] in responding] # filter nonresponsive first neigbors
 
-    for i in range(1, responding):
-        if responding[i] not in first_neighbors and responding[i] not in second_neighbors:
-            responding.remove(responding[i])
+    # Find second neighbors (nodes connected to first neighbors via either gap or syn)
+    second_neighbors = np.where((np.sum(list(Ggap[:, responsive_first_neighbors]), axis=1) > 0) | 
+                                (np.sum(list(Gsyn[:, responsive_first_neighbors]), axis=1) > 0))[0]
     
+    responsive_second_neighbors = [second_neighbors[i] for i in range(len(second_neighbors)) if second_neighbors[i] in responding] # filter nonresponsive first neigbors
+
+    # Create a set of allowed nodes (stim + first + second neighbors)
+    allowed_nodes = set([stim]).union(set(responsive_first_neighbors)).union(set(responsive_second_neighbors))
+    
+    # Filter responding list to only include allowed nodes # check again if is responsive
+    first_second_responsive_nodes = [node for node in responding if node in allowed_nodes]
+    
+    responding = first_second_responsive_nodes # = list(responding)
     
     n_responding = len(responding)
     if n_responding>15: continue
@@ -437,8 +451,8 @@ for (i_folder, folder) in enumerate(ds_list):
     
 
     # save connectome based network considering only responsive neurons over all stimulations
-    gamma_g = (Ggap*ggap/Ci)[responding][:, responding] 
-    gamma_s = (Gsyn*gsyn/Ci)[responding][:, responding]
+    gamma_g = (Ggap*ggap)[responding][:, responding] 
+    gamma_s = (Gsyn*gsyn)[responding][:, responding]
     Es = Esyn[responding][:, responding]
     
     # Plot gamma_g and gamma_s as heatmaps
@@ -451,12 +465,15 @@ for (i_folder, folder) in enumerate(ds_list):
 
     nonlin_kernel = nlfc.models.LIF(
         num_neurons=n_responding,
-        gamma_g=gamma_g, 
-        gamma_s=gamma_s, 
-        gamma=Gcell / Ci, 
+        C=Ci,
+        gamma_g=(Ggap)[responding][:, responding], 
+        gamma_s=(Gsyn)[responding][:, responding], 
+        gap_conductance=ggap,
+        syn_conductance=gsyn,
+        gamma=Gcell, 
         beta=beta,  
         E_c=Ecell, 
-        E_s=Es, 
+        E_s= Esyn[responding][:, responding], 
         a_r=ar, 
         a_d=ad, 
     )
@@ -465,11 +482,11 @@ for (i_folder, folder) in enumerate(ds_list):
     # g = nonlin_kernel.compute_direct_negf() 
     print("NEGF fitting")
         
-    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+16, responding], dt=fconn.Dt, fit_linear_model=True, max_iters=20)
+    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:22:2, responding], dt=2*fconn.Dt, fit_linear_model=True, max_iters=100, include_adj_matrix=True)
     print('FIT DONE')
 
     # plot neural network after fitting
-    nlfc.utils.netplots.neural_network(nonlin_kernel.gamma_g, nonlin_kernel.gamma_g, nonlin_kernel.E_s, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
+    nlfc.utils.netplots.neural_network(nonlin_kernel.gamma_g*nonlin_kernel.gap_cond, nonlin_kernel.gamma_s*nonlin_kernel.syn_cond, nonlin_kernel.E_s, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
    
     ####
     # Plot
@@ -737,5 +754,46 @@ for (i_folder, folder) in enumerate(ds_list):
     plt.close(fig)        # Plot heatmaps for each neuron pair
     fig2.savefig(os.path.join(main_dir, filename2), bbox_inches="tight")
     plt.close(fig2)        # Plot heatmaps for each neuron pair
+
+    # Save parameters before fitting as a tab-delimited text file
+    params_before_fitting = {
+        "Ci": Ci,
+        "Gcell": Gcell,
+        "Ecell": Ecell,
+        "ggap": ggap,
+        "gsyn": gsyn,
+        "ar": ar,
+        "ad": ad,
+        "beta": beta,
+        "esynexc": esynexc,
+        "esyninh": esyninh,
+    }
+    with open(os.path.join(main_dir, "params_before_fitting.txt"), "w") as f:
+        f.write("Parameter\tValue\n")
+        for key, value in params_before_fitting.items():
+            f.write(f"{key}\t{value}\n")
+
+    # Save nonlin_kernel attributes after fitting as a tab-delimited text file
+    params_after_fitting = {
+        "C": nonlin_kernel.C,
+        "gamma": nonlin_kernel.gamma,
+        "beta": nonlin_kernel.beta,
+        "E_c": nonlin_kernel.E_c,
+        "a_r": nonlin_kernel.a_r,
+        "a_d": nonlin_kernel.a_d,
+    }
+    with open(os.path.join(main_dir, "params_after_fitting.txt"), "w") as f:
+        f.write("Parameter\tValue\n")
+        for key, value in params_after_fitting.items():
+            f.write(f"{key}\t{value}\n")
+
+    # Save gamma_g, gamma_s, and Esyn as separate tab-delimited text files
+    np.savetxt(os.path.join(main_dir, "gamma_g.txt"), gamma_g, delimiter="\t", fmt="%.6f")
+    np.savetxt(os.path.join(main_dir, "gamma_s.txt"), gamma_s, delimiter="\t", fmt="%.6f")
+    np.savetxt(os.path.join(main_dir, "Esyn.txt"), Esyn, delimiter="\t", fmt="%.6f")
+
+    np.savetxt(os.path.join(main_dir, "gamma_g_after_fitting.txt"), nonlin_kernel.gamma_g*nonlin_kernel.gap_cond, delimiter="\t", fmt="%.6f")
+    np.savetxt(os.path.join(main_dir, "gamma_s_after_fitting.txt"), nonlin_kernel.gamma_s*nonlin_kernel.syn_cond, delimiter="\t", fmt="%.6f")
+    np.savetxt(os.path.join(main_dir, "E_s_after_fitting.txt"), nonlin_kernel.E_s, delimiter="\t", fmt="%.6f")
 
 

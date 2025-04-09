@@ -482,7 +482,7 @@ for (i_folder, folder) in enumerate(ds_list):
     # g = nonlin_kernel.compute_direct_negf() 
     print("NEGF fitting")
         
-    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:22:2, responding], dt=2*fconn.Dt, fit_linear_model=True, max_iters=100, include_adj_matrix=True)
+    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:6, responding], dt=fconn.Dt, fit_linear_model=True, max_iters=100, include_adj_matrix=True)
     print('FIT DONE')
 
     # plot neural network after fitting

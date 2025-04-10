@@ -320,7 +320,7 @@ for (i_folder, folder) in enumerate(ds_list):
             main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/equilibirum_gf_fit/"
 
         ie_dir_list = []
-        
+
         for ie in stimulations_idx:  # stimulation index only though cases which the most stimulated neuron is stimulated
             responding_ie = fconn.resp_neurons_by_stim[ie]
             i0 = max(0, fconn.i0s[ie])  # start of the stimulation
@@ -459,7 +459,8 @@ for (i_folder, folder) in enumerate(ds_list):
 
         # plot signals for visualization
         for ie_idx in range(num_stimulations):
-            os.makedirs(ie_dir, exist_ok=True)
+            os.makedirs(ie_dir_list[ie_idx], exist_ok=True)
+            ie_dir 
             ie = stimulations_idx[ie_idx]
 
             fig, ax = plt.subplots(figsize=(10, 6))  # Create figure and axis

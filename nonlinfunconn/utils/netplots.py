@@ -71,9 +71,9 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         node_sizes = np.full(num_nodes, min_size)  # Default size if all strengths are zero
     # Make the first node have a bold stroke
     node_border_colors = ['black'] * num_nodes
-    node_border_colors[0] = 'orange'  # Set the first node's border color to red
+    node_border_colors[0] = 'magenta'  # Set the first node's border color to red
     node_border_widths = [1] * num_nodes
-    node_border_widths[0] = 2  # Set the first node's border width to 3
+    node_border_widths[0] = 3  # Set the first node's border width to 3
 
 
     

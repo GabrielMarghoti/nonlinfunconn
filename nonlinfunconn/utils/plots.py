@@ -14,7 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 
-def time_level_curves(time, G, G0, save_path = None):
+def time_level_curves(time, G, G0, xlabel, ylabel, title, save_path = None):
     plt.figure(figsize=(6, 4), dpi=200)
     
     plt.plot(time[-1] - time[:], G0, label="G₀", color='black', linewidth=2.4)
@@ -47,8 +47,18 @@ def time_level_curves(time, G, G0, save_path = None):
     
     if xlim_max == 0 : xlim_max = time[-1] - time[0]  # Default to full range
 
-    plt.xlabel("t - t′ (s)")
-    plt.ylabel("G")
+    if xlabel == None: 
+        plt.xlabel("t - t′ (s)") 
+    else: 
+        plt.xlabel(xlabel)
+    if ylabel == None:
+       plt.ylabel("g(t,t')")
+    else:
+        plt.ylabel(ylabel)
+    if title == None:  
+        plt.title("Neuron pair functional connectivity")
+    else:
+        plt.title(title)
     
     # Adjust x-axis limits
     plt.xlim([0, xlim_max])

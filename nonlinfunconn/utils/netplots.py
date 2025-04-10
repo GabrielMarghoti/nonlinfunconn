@@ -54,7 +54,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         edge_widths = np.full(len(edge_weights), min_width)  # Default width if all weights are zero
 
     # Define layout
-    pos = positions if positions is not None else nx.spring_layout(G, k=None)  # Force-directed layout with increased k value
+    pos = positions if positions is not None else nx.circular_layout(G) #nx.spring_layout(G, k=None)  # Force-directed layout with increased k value
     
     # Calculate node sizes based on connectivity strength
     # Node size is proportional to the sum of weights of incoming and outgoing edges

@@ -33,14 +33,15 @@ matchless_nan_th = None
 matchless_nan_th_from_file = "--matchless-nan-th-from-file" in sys.argv
 matchless_nan_th_added_only = "--matchless-nan-th-added-only" in sys.argv
 merge = "--no-merge" not in sys.argv
-ds_exclude_tags = "mutant" if "--unc31" in sys.argv else None
+ds_exclude_tags =  None
 
 aconn_ds_i = None # default is loading from funatlas, if aconn_ds_i is set, it will load from the specified dataset
 # default 
 output_folder = "figures/"
 
-ds_list_path = "/home/gabrielm/paper_reproduction/ds_list_full.txt"
+ds_list_path =  "/home/gabrielm/paper_reproduction/ds_list_unc31.txt" if "--unc31" in sys.argv else "/home/gabrielm/paper_reproduction/ds_list_full.txt"
 ds_list_spont_path = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
+
 
 for arg in sys.argv:
     _arg = arg.split(":")
@@ -252,6 +253,7 @@ print(f"esyninh: {esyninh}")
 for (i_folder, folder) in enumerate(ds_list):
 
     #if '20211104_163944' not in folder: continue # use only folder of waterfall fig1
+    #if '20220511_150909' in folder: continue # problem with this data
 
     # Create functional connectome
     fconn = pp.Fconn.from_file(folder)
@@ -295,7 +297,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
     num_stimulations = len(stimulations_idx)
 
-    if num_stimulations < 3: continue # consider only neurons stimulated at least 3 times
+    #if num_stimulations < 3: continue # consider only neurons stimulated at least 3 times
 
     stim_neuron_label = labels[stim]
 
@@ -482,7 +484,7 @@ for (i_folder, folder) in enumerate(ds_list):
     # g = nonlin_kernel.compute_direct_negf() 
     print("NEGF fitting")
         
-    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+22:2, responding], dt=2*fconn.Dt, fit_linear_model=True, max_iters=100, include_adj_matrix=True)
+    p = nonlin_kernel.fit(Y_smooth_total[0:1, shift_vol:shift_vol+80:4, responding], dt=4*fconn.Dt, fit_linear_model=True, max_iters=100, include_adj_matrix=True)
     print('FIT DONE')
 
     # plot neural network after fitting

@@ -146,11 +146,6 @@ funa = pp.Funatlas.from_datasets(ds_list,merge_bilateral=merge,signal="green",
 aconn_chem, aconn_elec = funa.get_aconnectome_from_file() # get the anatomical connectome with the correct atlas index for neuros
 num_neurons = aconn_chem.shape[0]
 
-
-############################################################################################################################################
-########### #NEGF kernels
-############################################################################################################################################
-
 # Find the kernel parameters based on Kunert C.Elegans model
 f = open('/home/gabrielm/paper_reproduction/kunertPRE2014/params.json','r')
 params = json.load(f)
@@ -251,7 +246,7 @@ print(f"esyninh: {esyninh}")
 for (i_folder, folder) in enumerate(ds_list):
 
     #if '20211104_163944' not in folder: continue # use only folder of waterfall fig1
-    if '20220511_150909' in folder: continue # problem with this data
+    if '20220511_150909' in folder: continue # problem with this data, not sure if bug in the code or just bad dataset
 
     # Create functional connectome
     fconn = pp.Fconn.from_file(folder)
@@ -279,7 +274,7 @@ for (i_folder, folder) in enumerate(ds_list):
     print("Processing dataset", i_folder, ":", folder)     
 
     stim_neurons_analyzed = set()   
-
+    
     for stim in fconn.stim_neurons[fconn.stim_neurons > 0]:
         # Get the stimulation neurons
         if stim in stim_neurons_analyzed:
@@ -341,8 +336,10 @@ for (i_folder, folder) in enumerate(ds_list):
             Y_total.append(Y[np.newaxis, ...])  # Add a new axis to ensure 3D structure
             Y_smooth_total.append(Y_smooth[np.newaxis, ...])  # Add a new axis to ensure 3D structure
         
-        if stim not in responding:
-            responding.update([stim]) 
+        if stim not in responding: 
+            print('Stim. neuron not responsive')
+            continue 
+            #responding.update([stim]) 
 
         responding = list(responding)
         
@@ -431,14 +428,17 @@ for (i_folder, folder) in enumerate(ds_list):
         )
         G_degree = 2
 
+#########################################################################################################################################################
+        
         # FIT NEGF
         print("NEGF fitting")
 
-        lowering_resolution_step = 10
-        p = nonlin_kernel.fit(Y_smooth_total[:, shift_vol::lowering_resolution_step, responding], dt=lowering_resolution_step*fconn.Dt, fit_linear_model= not kwar_fit_negf , max_iters=50, include_adj_matrix=True)
+        lowering_resolution_step = 10 # lower the sampling rate so fitting is not so time consuming
+        p = nonlin_kernel.fit(Y_smooth_total[:, shift_vol::lowering_resolution_step, responding], dt=lowering_resolution_step*fconn.Dt, fit_linear_model= not kwar_fit_negf , max_iters=100, include_adj_matrix=True)
         
         print('FIT DONE')
-
+#########################################################################################################################################################
+        
         # plot neural network after fitting
         nlfc.utils.netplots.neural_network(nonlin_kernel.gamma_g*nonlin_kernel.gap_cond, nonlin_kernel.gamma_s*nonlin_kernel.syn_cond, nonlin_kernel.E_s, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
     
@@ -563,16 +563,21 @@ for (i_folder, folder) in enumerate(ds_list):
         fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(16, 12)) 
         fig2, ax2 = plt.subplots(nrows=1, ncols=2, figsize=(12, 6)) 
         for a in np.ravel(ax): 
-            a.set_xticks([])
-            a.set_yticks([])
+            # a.set_xticks([])
+            # a.set_yticks([])
             a.twinx().set_yticks([])
+            a.set_xlabel('time (s)')
         for a in np.ravel(ax2): 
-            a.set_xticks([])
-            a.set_yticks([])
+            # a.set_xticks([])
+            # a.set_yticks([])
             a.twinx().set_yticks([])
         if nrows == 1: 
             ax = np.array([ax])
+            a.set_xlabel('time (s)')
 
+        ax[0, 0].set_ylabel('Signal (a.u)')
+
+        ax2[0].set_ylabel('Signal (a.u)')
 
         for i, neu_i in enumerate(responding):
 
@@ -629,8 +634,8 @@ for (i_folder, folder) in enumerate(ds_list):
                 fit_y_trial =  pp.convolution(stim_y, k_trial, fconn.Dt,8)
 
                 #lbl = str(neu_i)
-                lbl = f'stim. {ie}'
-                fit_lbl = "Trial kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
+                lbl = f'Response to stim. #{ie}'
+                fit_lbl = "Trial kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
                 lw = 1
                 if neu_i == stim: 
                     lbl += "*"
@@ -650,7 +655,7 @@ for (i_folder, folder) in enumerate(ds_list):
                     #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                     ax2[1].set_xlim(time_plt[0], time_plt[-1])
                     ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
-                    ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls='--', c=stim_color)
+                    ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="NEGF pred.", lw=2, ls='--', c=stim_color)
                     ax2[1].axvline(0, c="k", alpha=0.5)
 
                 ax[ax_r, ax_c].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
@@ -659,8 +664,9 @@ for (i_folder, folder) in enumerate(ds_list):
                 #rf_plt = rf
                 #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
                 stim_y_plt = stim_y / np.sum(stim_y) * np.abs(np.sum(y))
-
-                ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="FIT NEGF" + "|" + "g", lw=2, ls=':', c=stim_color)
+                if neu_i != stim:
+                    ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, :, i], label="NEGF pred.", lw=2, ls=':', c=stim_color)
+                    
                 # ax[ax_r, ax_c].plot(x, rf_plt, label="rf", lw=2, c="k")
                 # ax[ax_r, ax_c].plot(x, stim_y_plt, label=f"st stimulation {ie}", lw=2, c=stim_color, alpha=0.6)
 
@@ -683,7 +689,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
             fit_y =  pp.convolution(stim_y, lin_kernel, fconn.Dt,8)
             fit_ls = "-"
-            fit_lbl = "Av. kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
+            fit_lbl = "Linear kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
             if neu_i == stim:
                 panel_title = "Stimulated "+ panel_title
                 #ax2[0].plot(time_fit, stim_y, label="Filtered Stim.", c='yellow', lw=1)
@@ -691,16 +697,17 @@ for (i_folder, folder) in enumerate(ds_list):
             elif neu_i == most_variable_neuron:
                 ax2[1].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
                 ax2[1].legend()
-            ax[ax_r, ax_c].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
+            if neu_i != stim: 
+                ax[ax_r, ax_c].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
 
             ax[ax_r, ax_c].set_xlim(time_plt[0], time_plt[-1])
             ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, :, neu_i]), np.nanmax(Y_smooth_total[:, :, neu_i]))
             ax[ax_r, ax_c].axvline(0, c="k", alpha=0.8)
 
             ax[ax_r, ax_c].set_title(panel_title, fontsize=10)
-
             if i_plot == len(responding) - 1:  # Add legend only for the last panel
-                ax[ax_r, ax_c].legend()
+                handles, labels_plt = ax[ax_r, ax_c].get_legend_handles_labels()
+                fig.legend(handles, labels_plt, loc='upper center', bbox_to_anchor=(0.5, 0.95), ncol=3)
 
 
         # Save plot with neuron index in filename

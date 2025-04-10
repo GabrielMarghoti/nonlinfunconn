@@ -286,7 +286,7 @@ class LIF():
 
         return self.g0
 
-    def compute_direct_negf(self, Vs, dt, p: np.ndarray = None, iteration_index_MAX=5, return_estimated_V=False):
+    def compute_direct_negf(self, Vs, dt, p: np.ndarray = None, iteration_index_MAX=10, return_estimated_V=False):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -349,6 +349,7 @@ class LIF():
                     self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.Vth[i, j])
                 )[non_zero_indices] / self.delta_Vs[non_zero_indices, j]
 
+                prev_delta_S = np.copy(self.delta_Ss[:, i, j])
                 for _ in range(iteration_index_MAX):  # Iterative approximation for self consistent series approximation
                                                       # in the future, this should be a while loop with a convergence criterion tol.
                     
@@ -359,6 +360,10 @@ class LIF():
                     )
 
                     self.delta_Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
+                    if np.all(np.abs(self.delta_Ss[:, i, j] - prev_delta_S) < 1e-3):   # stop self consistent iteration if change is smaller than a tolerance
+                        break
+                    prev_delta_S = np.copy(self.delta_Ss[:, i, j])
+                    
 
                 self.pi[:, :, i, j] = nontt_conv(
                     self.gs0[:, :, i, j], 

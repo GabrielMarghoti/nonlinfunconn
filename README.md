@@ -17,14 +17,7 @@ Clone the repository and install the required dependencies:
 ```bash
 git clone https://github.com/gabrielmarghoti/nonlinfunconn.git
 cd nonlinfunconn
-pip install -r requirements.txt
-```
-
-### Additional Dependencies for *C. elegans* Brain Analysis
-To analyze *C. elegans* neural connectivity, install the following:
-```bash
-pip install git+https://github.com/leiferlab/pumpprobe.git
-pip install wormdatamodel wormbrain
+sudo python3 setup.py install
 ```
 
 ## Usage

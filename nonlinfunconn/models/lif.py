@@ -115,13 +115,41 @@ class LIF():
             raise ValueError(
                 f"1D array length {value.shape[0]} does not match either dimension of the target shape {shape}"
             )
-    def get_parameters_array(self, include_adj_matrix: bool = True) -> np.ndarray:
-            """Flatten and concatenate model parameters into a single vector."""
-            if not include_adj_matrix:
-                self.attribute_list.remove("gamma_g")
-                self.attribute_list.remove("gamma_s")
-            param_list = [getattr(self, attr).flatten() for attr in self.attribute_list]
-            return np.concatenate(param_list)
+    def get_parameters_array(self, include_adj_matrix: bool = True, return_constrain_p: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """
+        Flatten and concatenate model parameters into a single vector.
+
+        Parameters:
+            include_adj_matrix (bool): Whether to include adjacency matrix-related parameters (gamma_g, gamma_s).
+            return_constrain_p (bool): Whether to return parameter constraints (min and max values).
+
+        Returns:
+            np.ndarray: Flattened parameter array if return_constrain_p is False.
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: Flattened parameter array, min constraints, and max constraints if return_constrain_p is True.
+        """
+        # Exclude adjacency matrix-related parameters if specified
+        if not include_adj_matrix:
+            self.attribute_list = [attr for attr in self.attribute_list if attr not in ["gamma_g", "gamma_s"]]
+
+        # Flatten all parameters in the attribute list
+        param_list = [getattr(self, attr).flatten() for attr in self.attribute_list]
+
+        if return_constrain_p:
+            # Define constraints for each parameter
+            max_constrain_list = []
+            min_constrain_list = []
+            for attr in self.attribute_list:
+                if attr in ["gamma", "gamma_g", "gamma_s", "gap_cond", "syn_cond", "C", "gamma", "beta", "a_r", "a_d"]:   
+                    # Parameters which must be positive
+                    max_constrain_list.append(np.full_like(getattr(self, attr).flatten(), np.inf))
+                    min_constrain_list.append(np.full_like(getattr(self, attr).flatten(), 0))
+                elif attr in ["E_c", "E_s", "Vth"]:  
+                    # Parameters which must be into biological plausable values -100 to 30 mV
+                    max_constrain_list.append(np.full_like(getattr(self, attr).flatten(), 30))
+                    min_constrain_list.append(np.full_like(getattr(self, attr).flatten(), -100))
+            return np.concatenate(param_list), np.concatenate(min_constrain_list), np.concatenate(max_constrain_list)
+
+        return np.concatenate(param_list)
 
     def set_parameters(self, p):
         """Update model attributes from a flattened parameter array."""
@@ -343,7 +371,7 @@ class LIF():
             for j in range(self.num_neurons):
                 if self.gamma_g[i, j] == 0 and self.gamma_s[i, j]==0: continue # avoid computing null kernell (no connection)
                 synaptic_diff = np.zeros_like(self.delta_Vs[:, j])
-                non_zero_indices = np.abs(self.delta_Vs[:, j]) >= 0.000001
+                non_zero_indices = np.abs(self.delta_Vs[:, j]) >= 0.0001
                 synaptic_diff[non_zero_indices] = (
                     self.synaptic_activation(self.Vs[:, j], self.beta[i, j], self.Vth[i, j]) - 
                     self.synaptic_activation(self.Veq[None, j], self.beta[i, j], self.Vth[i, j])
@@ -352,12 +380,9 @@ class LIF():
                 prev_delta_S = np.copy(self.delta_Ss[:, i, j])
                 for _ in range(iteration_index_MAX):  # Iterative approximation for self consistent series approximation
                                                       # in the future, this should be a while loop with a convergence criterion tol.
-                    
-                    self.sigma[:, :, i, j] = (
-                        self.sigma0[:, :, i, j] / 
-                        self.d_synaptic_activation(self.Veq[j] * np.ones((self.time_len)), self.beta[i, j], self.Vth[i, j])[None, :] * 
-                        synaptic_diff[None, :] * (1 - (self.delta_Ss[:, i, j] / (1 - self.Seq[i, j])))
-                    )
+                    quotient = self.d_synaptic_activation(self.Veq[j] * np.ones((self.time_len)), self.beta[i, j], self.Vth[i, j]) * synaptic_diff * (1 - (self.delta_Ss[:, i, j] / (1 - self.Seq[i, j])))
+                    non_zero_indices = np.abs(quotient) >= 0.0001
+                    self.sigma[:, non_zero_indices, i, j] = self.sigma0[:, non_zero_indices, i, j] /  quotient[None, non_zero_indices]
 
                     self.delta_Ss[:, i, j] = nontt_conv(self.sigma[:, :, i, j], self.delta_Vs[:, j], self.dt)
                     if np.all(np.abs(self.delta_Ss[:, i, j] - prev_delta_S) < 1e-3):   # stop self consistent iteration if change is smaller than a tolerance
@@ -433,6 +458,7 @@ class LIF():
         parameter_to_fit_list: Optional[list] = None,
         n_neigh_max: int = 2,
         rms_limits: Optional[Tuple[int, int]] = None,
+        constrain=True, verbose=True,
         auto_stop: bool = True,
         rms_tol: float = 1e-3,
         max_iters: int = 1000,
@@ -462,7 +488,7 @@ class LIF():
                 raise AttributeError(f"Missing required class attribute: {attr}")
 
         # Initialize parameters
-        p0 = self.get_parameters_array(include_adj_matrix) if p0 is None else p0
+        p0, min_constrain, max_constrain = self.get_parameters_array(include_adj_matrix, return_constrain_p=constrain)
 
         p = p0.copy()
         m = np.zeros_like(p)
@@ -486,7 +512,7 @@ class LIF():
                 else:
                     _, Y_pred[trial_idx, :, :] = variant_self.compute_direct_negf(Vs=X[trial_idx], dt = self.dt, p=p, return_estimated_V=True)
 
-                err += np.sqrt(np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2))
+                err += np.sqrt(np.sum((Y_pred[trial_idx][:, 1:] - Y[trial_idx][:, 1:]) ** 2))
             return err / (n_trials* time_len * n_neurons)
 
         def compute_grad(p, X, Y, epsilon=1e-2):
@@ -516,6 +542,8 @@ class LIF():
             v_hat = v / (1 - beta2 ** t)
 
             p -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
+            p = np.clip(p, min_constrain, max_constrain)
+            # Apply constraints
 
             current_loss = loss(self, p, Y, Y)
             if t % 10 == 0 or t == 1:

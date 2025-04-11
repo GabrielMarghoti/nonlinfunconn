@@ -433,8 +433,8 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         print("NEGF fitting")
 
-        lowering_resolution_step = 5 # lower the sampling rate so fitting is not so time consuming
-        p = nonlin_kernel.fit(Y_smooth_total[:, shift_vol::lowering_resolution_step, responding], dt=lowering_resolution_step*fconn.Dt, fit_linear_model= not kwar_fit_negf , max_iters=100, include_adj_matrix=True)
+        lowering_resolution_step = 10 # lower the sampling rate so fitting is not so time consuming
+        p = nonlin_kernel.fit(Y_smooth_total[:, shift_vol::lowering_resolution_step, responding], dt=lowering_resolution_step*fconn.Dt, fit_linear_model= not kwar_fit_negf , max_iters=30, include_adj_matrix=True, constrain=True, verbose=True)
         
         print('FIT DONE')
 #########################################################################################################################################################

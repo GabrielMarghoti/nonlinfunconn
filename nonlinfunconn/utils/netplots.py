@@ -59,7 +59,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     # Get edge colors
     # Normalize edge widths to a reasonable range (e.g., 1 to 10)
 
-    def normalize_weights(weights, min_width=0.6, max_width=6):
+    def normalize_weights(weights, min_width=0.0, max_width=5):
         if weights.size == 0:
             return weights  # or return np.zeros_like(weights) depending on context
         if np.max(weights) > 0 and np.max(weights) != np.min(weights):

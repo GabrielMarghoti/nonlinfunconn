@@ -3,8 +3,8 @@
 
 
 # Unc31 worms, without wirelless connections. fit exp kernels and NEGF, compare the predicted signals with observed activity
-python3 scripts/C_Elegans/fit_negf.py  --folder:figures --signal:green --no-merge --unc31 --fit-negf
+python3 scripts/C_Elegans/fit_negf.py  --folder:figures --signal:green --no-merge --unc31 
 
 
 # WT (wild type) worms, with wirelless connections. fit exp kernels and NEGF, compare the predicted signals with observed activity
-python3 scripts/C_Elegans/fit_negf.py  --folder:figures --signal:green --no-merge --fit-negf
+python3 scripts/C_Elegans/fit_negf.py  --folder:figures --signal:green --no-merge

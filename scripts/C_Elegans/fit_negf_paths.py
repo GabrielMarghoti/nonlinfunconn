@@ -205,7 +205,7 @@ Ci = params['C'] # Membrane capacitance 1 F
 
 Ci = Ci*1e+12  ## kunert Farad for capacitance F what I noticed got numerical problems due to finite-precision of floating-point, so I convert to 1 pF = 1e-12 F
 
-Ci = 400*Ci # trick to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
+Ci = 500*Ci # trick to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
 
 Gcell = params['Gcell']*1e+12 # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
@@ -445,7 +445,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 10 
+        lowering_resolution_step = 20 
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -471,16 +471,12 @@ for (i_folder, folder) in enumerate(ds_list):
                         "E_c": 20,  
                         }
 
-        params_after_fitting = lif_gf.ADAM_fit(x = Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
+        lif_gf.ADAM_fit(x = Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
                         dt = lowering_resolution_step*fconn.Dt,
                         fit_linear_model=kwar_fit_lineal_model , 
-                        max_iters=20, 
+                        max_iters=30, 
                         include_adj_matrix=True, 
-                        constrain = (min_constrain_dict, max_constrain_dict),
-                        learning_rate = 1e-1,
-                        beta1 = 0.8,
-                        beta2 = 0.9
-                        )
+                        constrain = (min_constrain_dict, max_constrain_dict))
         
         print('FIT DONE')
 
@@ -764,13 +760,32 @@ for (i_folder, folder) in enumerate(ds_list):
         plt.close(fig2)        # Plot heatmaps for each neuron pair
 
         # Save parameters before fitting as a tab-delimited text file
-        params_before_fitting = kunert_parameters
-
+        params_before_fitting = {
+            "Ci": Ci,
+            "Gcell": Gcell,
+            "Ecell": Ecell,
+            "ggap": ggap,
+            "gsyn": gsyn,
+            "ar": ar,
+            "ad": ad,
+            "beta": beta,
+            "esynexc": esynexc,
+            "esyninh": esyninh,
+        }
         with open(os.path.join(main_dir, "params_before_fitting.txt"), "w") as f:
             f.write("Parameter\tValue\n")
             for key, value in params_before_fitting.items():
                 f.write(f"{key}\t{value}\n")
 
+        # Save lif_gf attributes after fitting as a tab-delimited text file
+        params_after_fitting = {
+            "C": lif_gf.C,
+            "gamma": lif_gf.gamma,
+            "beta": lif_gf.beta,
+            "E_c": lif_gf.E_c,
+            "a_r": lif_gf.a_r,
+            "a_d": lif_gf.a_d,
+        }
         with open(os.path.join(main_dir, "params_after_fitting.txt"), "w") as f:
             f.write("Parameter\tValue\n")
             for key, value in params_after_fitting.items():

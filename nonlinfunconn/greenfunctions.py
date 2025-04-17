@@ -75,7 +75,7 @@ class GreenFunctions:
             delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt) for trial_idx in range(self.n_trials)
         ))
 
-    def get_parameters_array(self, constrain=None):
+    def get_parameters_array(self, parameters = None, constrain=None):
         """
         Flatten and concatenate model parameters into a single vector.
 
@@ -90,13 +90,16 @@ class GreenFunctions:
         _min_constrain_list = []
         _max_constrain_list = []
 
-        for attr in self.model_instance.parameters.keys():
+        if parameters == None:
+            parameters = self.model_instance.parameters.keys()
+
+        for attr in parameters:
             param_list.append(getattr(self.model_instance, attr).flatten())
             if constrain is not None:
                 try: 
                     _min_constrain_list.append(np.full_like(getattr(self.model_instance, attr), constrain[0][attr]).flatten())
                     _max_constrain_list.append(np.full_like(getattr(self.model_instance, attr), constrain[1][attr]).flatten())
-                except KeyError:
+                except:
                     _min_constrain_list.append(np.full_like(getattr(self.model_instance, attr), -np.inf).flatten())
                     _max_constrain_list.append(np.full_like(getattr(self.model_instance, attr), np.inf).flatten())
 
@@ -108,15 +111,21 @@ class GreenFunctions:
         return param_array, min_constrain_array, max_constrain_array
 
 
-    def set_parameters(self, p):
+    def set_parameters(self, p, parameters = None):
         """Update model attributes from a flattened parameter array."""
         offset = 0
+
+        if parameters == None:
+            parameters = self.model_instance.parameters.keys()
+
         for attr in self.model_instance.parameters.keys():
             arr = getattr(self.model_instance, attr)
             size = arr.size
             new_vals = p[offset:offset + size].reshape(arr.shape)
             setattr(self, attr, new_vals)
             offset += size
+        
+        self.parameters = self.model_instance.parameters
 
     def path_G(self, path, trial_idx = None, linear_model = False):
         """
@@ -342,4 +351,4 @@ class GreenFunctions:
             delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt) for trial_idx in range(self.n_trials)
         ))
 
-        return p, None, None
+        return self.parameters

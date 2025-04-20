@@ -246,7 +246,8 @@ class GreenFunctions:
         beta1: float = 0.9,
         beta2: float = 0.999,
         eps: float = 1e-6,
-        p0: Optional[np.ndarray] = None
+        p0: Optional[np.ndarray] = None,
+        loss_method = 'correlation',
     ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
         """
         Fit the model using Adam gradient descent with parameter dict support.
@@ -270,6 +271,16 @@ class GreenFunctions:
         m_dict = {k: np.zeros_like(v) for k, v in p.items()}
         v_dict = {k: np.zeros_like(v) for k, v in p.items()}
 
+        def correlation_loss(y_pred, y_true):
+            vx = y_pred - np.mean(y_pred, axis=1, keepdims=True)
+            vy = y_true - np.mean(y_true, axis=1, keepdims=True)
+
+            numerator = np.sum(vx * vy, axis=1)
+            denominator = np.sqrt(np.sum(vx ** 2, axis=1)) * np.sqrt(np.sum(vy ** 2, axis=1))
+            
+            corr = numerator / (denominator + 1e-8)  # Add epsilon to avoid div by 0
+            return 1 - np.mean(corr)  # Average over nodes
+        
         def loss(variant_self, p, X, Y):
 
             err = 0.0
@@ -289,8 +300,11 @@ class GreenFunctions:
                 else:
                     _, Y_pred = self.model_instance.compute_direct_green_functions(X_trial, dt, p=p, return_estimated_V=True)
 
-                err += np.sqrt(np.sum((Y_pred - Y_trial) ** 2))
-            return err / (self.n_trials * self.time_len * self.n_nodes)
+                if loss_method == 'correlation':
+                    err += correlation_loss(Y_pred, Y_trial)
+                else:
+                    err += np.sqrt(np.sum((Y_pred - Y_trial) ** 2)) / (self.n_trials * self.time_len * self.n_nodes)
+            return err 
 
         def compute_grad(param_dict, X, Y, epsilon=1e-6):
             loss_0 = loss(self, param_dict, X, Y)

@@ -445,7 +445,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 10 
+        lowering_resolution_step = 5
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -480,7 +480,8 @@ for (i_folder, folder) in enumerate(ds_list):
                         learning_rate = 1e-1,
                         #beta1 = 0.8,
                         #beta2 = 0.9,
-                        rms_tol=1e-3
+                        rms_tol=1e-3,
+                        loss_method='correlation'
                         )
         
         print('FIT DONE')

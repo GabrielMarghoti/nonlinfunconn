@@ -456,8 +456,8 @@ for (i_folder, folder) in enumerate(ds_list):
                         "a_d": 0.0,  
                         "gamma_g": 0.0,
                         "gamma_s": 0.0,
-                        "E_s": -100,
-                        "E_c": -100,  
+                        "E_s": -120,
+                        "E_c": -120,  
                         }
         max_constrain_dict = {
                         "C": np.inf,          
@@ -467,19 +467,20 @@ for (i_folder, folder) in enumerate(ds_list):
                         "a_d": np.inf,  
                         "gamma_g": np.inf,
                         "gamma_s": np.inf,
-                        "E_s": 20,
-                        "E_c": 20,  
+                        "E_s": 100,
+                        "E_c": 100,  
                         }
 
         params_after_fitting = lif_gf.ADAM_fit(x = Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
                         dt = lowering_resolution_step*fconn.Dt,
                         fit_linear_model=kwar_fit_lineal_model , 
-                        max_iters=20, 
+                        max_iters=40, 
                         include_adj_matrix=True, 
                         constrain = (min_constrain_dict, max_constrain_dict),
                         learning_rate = 1e-1,
-                        beta1 = 0.8,
-                        beta2 = 0.9
+                        #beta1 = 0.8,
+                        #beta2 = 0.9,
+                        rms_tol=1e-3
                         )
         
         print('FIT DONE')
@@ -487,7 +488,7 @@ for (i_folder, folder) in enumerate(ds_list):
 #########################################################################################################################################################
         
         # plot neural network after fitting
-        nlfc.utils.netplots.neural_network(lif_gf.parameters["gamma_g"], lif_gf.parameters["gamma_s"], lif_gf.parameters["E_s"], np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
+        nlfc.utils.netplots.neural_network(params_after_fitting["gamma_g"], params_after_fitting["gamma_s"], params_after_fitting["E_s"], np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
     
         ####
         # Plot
@@ -580,8 +581,9 @@ for (i_folder, folder) in enumerate(ds_list):
 
             # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
              for i in range(n_responding):
+                Y_nonlin_fit[ie_idx, i] = Y_smooth_total[ie_idx][j, shift_vol]
                 for j in range(n_responding):
-                    Y_nonlin_fit[ie_idx, i, :] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], Y_smooth_total[ie_idx, j, shift_vol:], dt=fconn.Dt)
+                    Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], Y_smooth_total[ie_idx][j, shift_vol:], dt=fconn.Dt)
                 j = 0 # consider only the stimulated neuron as source
           
                 neu_i = responding[i]
@@ -781,8 +783,8 @@ for (i_folder, folder) in enumerate(ds_list):
         np.savetxt(os.path.join(main_dir, "gamma_s.txt"), gamma_s, delimiter="\t", fmt="%.6f")
         np.savetxt(os.path.join(main_dir, "Esyn.txt"), Esyn, delimiter="\t", fmt="%.6f")
 
-        np.savetxt(os.path.join(main_dir, "gamma_g_after_fitting.txt"), lif_gf.gamma_g, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "gamma_s_after_fitting.txt"), lif_gf.gamma_s, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "E_s_after_fitting.txt"), lif_gf.E_s, delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(main_dir, "gamma_g_after_fitting.txt"), params_after_fitting['gamma_g'], delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(main_dir, "gamma_s_after_fitting.txt"), params_after_fitting['gamma_s'], delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(main_dir, "E_s_after_fitting.txt"), params_after_fitting['E_s'], delimiter="\t", fmt="%.6f")
 
 

@@ -39,18 +39,16 @@ class LIF:
         """
         # Default parameters
         default_params = {
-            "V0": None,  # Equilibrium membrane potential
-            "S0": None,  # Equilibrium synaptic state
-            "C": 1000,  # Membrane capacitance  [pF]
+            "C": 1000,       # Membrane capacitance  [pF]
             "gamma_g": 100,  # Conductance for gap juctions [pS]
             "gamma_s": 100,  # Synaptic decay for chemical synapses [pS]
-            "gamma": 10,  # Membrane potential decay rate  [pS]
-            "beta": 0.125,  # Inverse synaptic timescale   [mV^-1]
-            "Vth": None,  # Threshold potential for spiking
-            "E_c": -60.0,  # Equilibrium membrane potential [mV]
-            "E_s": 0.0,  # Synaptic reversal potential (default value is excitatory)
-            "a_r": 1.0,  # Synaptic rise time constant
-            "a_d": 5.0,  # Synaptic decay time constant
+            "gamma": 10,     # Membrane potential decay rate  [pS]
+            "beta": 0.125,   # Inverse synaptic timescale   [mV^-1]
+            "Vth": None,     # Threshold potential for spiking
+            "E_c": -60.0,    # Equilibrium membrane potential [mV]
+            "E_s": 0.0,      # Synaptic reversal potential (default value is excitatory)
+            "a_r": 1.0,      # Synaptic rise time constant
+            "a_d": 5.0,      # Synaptic decay time constant
         }
 
         self.parameters = default_params.copy()  # Copy default parameters to instance variable
@@ -60,36 +58,31 @@ class LIF:
         # Assign parameters to instance variables
         self.num_neurons = num_nodes
 
-        V0 = self.parameters["V0"]
-        S0 = self.parameters["S0"]
-        C = self.parameters["C"]
-        gamma_g = self.parameters["gamma_g"]
-        gamma_s = self.parameters["gamma_s"]
-        gamma = self.parameters["gamma"]
-        beta = self.parameters["beta"]
-        Vth = self.parameters["Vth"]
-        E_c = self.parameters["E_c"]
-        E_s = self.parameters["E_s"]
-        a_r = self.parameters["a_r"]
-        a_d = self.parameters["a_d"]
+        V0      = None  #FIXME
+        S0      = None  #FIXME
+
+        Vth     = self.parameters["Vth"]
 
         # Expand parameters to appropriate shapes
-        self.gamma_g = expandtoarray(gamma_g, (num_nodes, num_nodes))
-        self.gamma_s = expandtoarray(gamma_s, (num_nodes, num_nodes))
-        self.E_s = expandtoarray(E_s, (num_nodes, num_nodes))
-        self.beta = expandtoarray(beta, (num_nodes, num_nodes))
-        self.a_r = expandtoarray(a_r, (num_nodes, num_nodes))
-        self.a_d = expandtoarray(a_d, (num_nodes, num_nodes))
-        self.C = expandtoarray(C, num_nodes)
-        self.gamma = expandtoarray(gamma, num_nodes)
-        self.E_c = expandtoarray(E_c, num_nodes)
+        self.C       = expandtoarray(self.parameters["C"]      ,  num_nodes)
+        self.gamma   = expandtoarray(self.parameters["gamma"]  ,  num_nodes)
+        self.E_c     = expandtoarray(self.parameters["E_c"]    ,  num_nodes)
+        self.gamma_g = expandtoarray(self.parameters["gamma_g"], (num_nodes, num_nodes))
+        self.gamma_s = expandtoarray(self.parameters["gamma_s"], (num_nodes, num_nodes))
+        self.E_s     = expandtoarray(self.parameters["E_s"]    , (num_nodes, num_nodes))
+        self.beta    = expandtoarray(self.parameters["beta"]   , (num_nodes, num_nodes))
+        self.a_r     = expandtoarray(self.parameters["a_r"]    , (num_nodes, num_nodes))
+        self.a_d     = expandtoarray(self.parameters["a_d"]    , (num_nodes, num_nodes))
         
         # find Vth as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
-        _Veq, _Seq = self.find_eq_self_consistent()#self.find_equilibrium(np.zeros((num_neurons)))
+        _Veq, _Seq = self.find_eq_self_consistent() # self.find_equilibrium(np.zeros((num_neurons)))
         if Vth is None:
             Vth = _Veq
         self.Vth = expandtoarray(Vth, (num_nodes, num_nodes))
 
+        self.parameters.update({'Vth': self.Vth})
+
+        # the first assumption for initial conditions is the equilibrium values
         if V0 == None:
             self.V0 = _Veq
         else:
@@ -99,6 +92,20 @@ class LIF:
             self.S0 = _Seq
         else:
             self.S0 = expandtoarray(S0, (num_nodes, num_nodes))
+
+        self.parameters.update({
+            "C": self.C,       # Membrane capacitance  [pF]
+            "gamma_g": self.gamma_g,  # Conductance for gap juctions [pS]
+            "gamma_s": self.gamma_s,  # Synaptic decay for chemical synapses [pS]
+            "gamma": self.gamma,     # Membrane potential decay rate  [pS]
+            "beta": self.beta,   # Inverse synaptic timescale   [mV^-1]
+            "Vth": self.Vth,     # Threshold potential for spiking
+            "E_c": self.E_c,    # Equilibrium membrane potential [mV]
+            "E_s": self.E_s,      # Synaptic reversal potential (default value is excitatory)
+            "a_r": self.a_r,      # Synaptic rise time constant
+            "a_d": self.a_d,      # Synaptic decay time constant
+        })
+
 
     def Veq_step(self, V, S):
         """
@@ -203,7 +210,12 @@ class LIF:
         exp_term = np.exp(-beta * (V - Vth))
         return (beta * exp_term) / (1 + exp_term) ** 2
 
-    def compute_direct_equilibrium_green_functions(self, time_len=None, dt=None):
+    def compute_direct_equilibrium_green_functions(self, time_len=None, dt=None, p=None):
+        # Update class attributes 
+        if p is not None:
+            for key, value in p.items():
+                if key in self.parameters:
+                    setattr(self, key, expandtoarray(value, getattr(self, key).shape))
 
         self.time_len = time_len if time_len is not None else self.time_len
         self.dt = dt if dt is not None else self.dt
@@ -273,19 +285,13 @@ class LIF:
         
         dt = dt if dt is not None else self.dt
         
-
-         # Update class attributes with optimized parameters
+        # Update class attributes 
         if p is not None:
-            offset = 0
-            for attr in self.parameters:
-                size = getattr(self, attr).size
-                setattr(self, attr, p[offset:offset + size].reshape(getattr(self, attr).shape))
-                offset += size
+            for key, value in p.items():
+                setattr(self, key, expandtoarray(value, getattr(self, key).shape))
 
         V0 = Vs[:, 0]  # first time point for each neuron
         delta_Vs = Vs - V0[:, None]  # (neurons, time)
-
-        ts = np.arange(0, time_len * dt, dt)
 
         # SHAPE: (num_neurons, num_neurons, time_len, time_len)
         green_shape = (num_neurons, num_neurons, time_len, time_len)
@@ -307,17 +313,15 @@ class LIF:
                 non_zero = np.abs(delta_Vs[j]) >= 1e-4
 
                 synaptic_diff[non_zero] = (
-                    self.synaptic_activation(Vs[j], self.beta[i, j], self.Vth[i, j]) -
+                    self.synaptic_activation(Vs[j], self.beta[i, j], self.Vth[i, j]) - 
                     self.synaptic_activation(V0[None, j], self.beta[i, j], self.Vth[i, j])
                 )[non_zero] / delta_Vs[j][non_zero]
-                import matplotlib.pyplot as plt
 
                 prev_delta_S = np.copy(delta_Ss[i, j])
 
                 for _ in range(iteration_index_MAX):
                     # Quotient for inverse synaptic kernel scaling
                     quotient = self.d_synaptic_activation(V0[j] * np.ones(time_len), self.beta[i, j], self.Vth[i, j]) * synaptic_diff * (1 - delta_Ss[i, j] / (1 - self.S0[i, j]))
-
 
                     valid = np.abs(quotient) >= 1e-4
                     sigma[i, j][:, valid] = self.sigma0[i, j][:, valid] / quotient[None, valid]
@@ -331,9 +335,9 @@ class LIF:
                     prev_delta_S = np.copy(delta_Ss[i, j])
 
                 # Compute π and g Green functions
-                factor = 1 - (delta_Vs[i] / (self.E_s[i, j] - V0[i]))
+                factor   = 1 - (delta_Vs[i] / (self.E_s[i, j] - V0[i]))
                 pi[i, j] = nontt_conv(self.gs0[i, j], factor[:, None] * sigma[i, j], dt)
-                g[i, j] = self.gg0[i, j] + pi[i, j]
+                g[i, j]  = self.gg0[i, j] + pi[i, j]
                
         if return_estimated_V:
             est_V = np.zeros_like(Vs)

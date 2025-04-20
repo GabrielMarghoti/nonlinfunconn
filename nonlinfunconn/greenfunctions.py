@@ -3,15 +3,13 @@ from typing import Optional, Tuple, Union
 import copy
 from joblib import Parallel, delayed
 
-from . import models    # main module with all models
 from nonlinfunconn import convolution
 from .utils.nontt_conv import  nontt_conv
-from .utils import expandtoarray
 
 
 class GreenFunctions:
     """
-    Class to compute and store Green's functions for a given nonlinear dinamical model.
+    Class to store Green's functions for a given nonlinear dinamical model.
 
     This class focuses on two primary Green's functions: 
     - **Interaction Green's functions**: Describe signal propagation between different nodes.
@@ -55,8 +53,6 @@ class GreenFunctions:
             raise TypeError("Model must be an instance of a class from the models subpackage.")
 
         self.model_instance = model
-
-        self.parameters = self.model_instance.parameters
 
         # Setup time and system states
         self.dt = dt
@@ -111,21 +107,16 @@ class GreenFunctions:
         return param_array, min_constrain_array, max_constrain_array
 
 
-    def set_parameters(self, p, parameters = None):
+    def set_parameters(self, p):
         """Update model attributes from a flattened parameter array."""
         offset = 0
-
-        if parameters == None:
-            parameters = self.model_instance.parameters.keys()
 
         for attr in self.model_instance.parameters.keys():
             arr = getattr(self.model_instance, attr)
             size = arr.size
             new_vals = p[offset:offset + size].reshape(arr.shape)
-            setattr(self, attr, new_vals)
+            setattr(self.model_instance, attr, new_vals)
             offset += size
-        
-        self.parameters = self.model_instance.parameters
 
     def path_G(self, path, trial_idx = None, linear_model = False):
         """
@@ -249,106 +240,115 @@ class GreenFunctions:
         rms_limits: Optional[Tuple[int, int]] = None,
         constrain=None, 
         auto_stop: bool = True,
-        rms_tol: float = 1e-3,
+        rms_tol: float = 1e-4,
         max_iters: int = 1000,
         learning_rate: float = 1e-2,
         beta1: float = 0.9,
         beta2: float = 0.999,
-        eps: float = 1e-8,
+        eps: float = 1e-6,
         p0: Optional[np.ndarray] = None
     ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
         """
-        Fit the model using Adam gradient descent.
+        Fit the model using Adam gradient descent with parameter dict support.
         """
+        import copy
+        from joblib import Parallel, delayed
 
         if dt is None:
             dt = self.dt 
-        
-        target = x       # review
 
-        # Check for required attributes
-        parameter_to_fit_list = self.parameters.keys() if parameter_to_fit_list is None else parameter_to_fit_list
+        target = x
+
+        parameter_to_fit_list = self.model_instance.parameters.keys() if parameter_to_fit_list is None else parameter_to_fit_list
 
         for attr in parameter_to_fit_list:
             if not hasattr(self.model_instance, attr):
                 raise AttributeError(f"Missing required class attribute: {attr}")
 
-        # Initialize parameters
-    
-        p0, min_constrain, max_constrain = self.get_parameters_array(constrain=constrain)
+        p = self.model_instance.parameters if p0 is None else p0
 
-        p = p0.copy()
-        m = np.zeros_like(p)
-        v = np.zeros_like(p)
+        m_dict = {k: np.zeros_like(v) for k, v in p.items()}
+        v_dict = {k: np.zeros_like(v) for k, v in p.items()}
 
         def loss(variant_self, p, X, Y):
+
             err = 0.0
             for trial_idx in range(X.shape[0]):
                 X_trial = X[trial_idx]
                 Y_trial = Y[trial_idx]
-                delta_X = X_trial - X_trial[:, [0]]  # Deviation from the initial condition
+                delta_X = X_trial - X_trial[:, [0]]
+
                 if fit_linear_model:
-                    g0 = variant_self.compute_direct_equilibrium_green_functions(num_nodes=self.n_nodes, time_len=Y_trial.shape[1], dt = dt, p=p)
-                    est_V = np.zeros((self.time_len, variant_self.num_nodes)) 
+                    g0 = variant_self.compute_direct_equilibrium_green_functions(num_nodes=self.n_nodes, time_len=Y_trial.shape[1], dt=dt, p=p)
+                    est_V = np.zeros((variant_self.num_nodes, self.time_len)) 
                     for i in range(variant_self.num_nodes):
-                        est_V[:,i] += self.Veq[i] * np.ones((self.time_len))
+                        est_V[i] += self.Veq[i]
                         for j in range(variant_self.num_nodes):
-                            est_V[:,i] += nontt_conv(g0[i, j, :, :], delta_X[j, :], dt)
-            
+                            est_V[i] += nontt_conv(g0[i, j], delta_X[j], dt)
                     Y_pred = est_V
                 else:
                     _, Y_pred = self.model_instance.compute_direct_green_functions(X_trial, dt, p=p, return_estimated_V=True)
 
                 err += np.sqrt(np.sum((Y_pred - Y_trial) ** 2))
-            return err / (self.n_trials* self.time_len * self.n_nodes)
+            return err / (self.n_trials * self.time_len * self.n_nodes)
 
-        def compute_grad(p, X, Y, epsilon=1e-2):
-            grad = np.zeros_like(p)
-            loss_0 = loss(self, p, X, Y)
+        def compute_grad(param_dict, X, Y, epsilon=1e-6):
+            loss_0 = loss(self, param_dict, X, Y)
+            grad_dict = {}
 
-            # Adjust epsilon based on the magnitude of each parameter
-            adjusted_epsilon = epsilon * np.maximum(np.abs(p), 1e-4)
-            def compute_single_grad(i):
-                p_eps = p.copy()
-                p_eps[i] += adjusted_epsilon[i]
-                loss_eps = loss(copy.deepcopy(self), p_eps, X, Y)
-                return (loss_eps - loss_0) / adjusted_epsilon[i]
+            for key in param_dict:
+                grad_dict[key] = np.zeros_like(param_dict[key])
 
-            grad = np.array(Parallel(n_jobs=-1)(delayed(compute_single_grad)(i) for i in range(len(p))))
+                def compute_single_grad(idx):
+                    perturbed = copy.deepcopy(param_dict)
+                    perturbed[key] = param_dict[key].copy()
+                    perturbed[key][idx] += epsilon
+                    loss_eps = loss(copy.deepcopy(self), perturbed, X, Y)
+                    return (loss_eps - loss_0) / epsilon
 
-            return grad
+                if np.isscalar(param_dict[key]):
+                    grads = [compute_single_grad(0)]
+                else:
+                    grads = Parallel(n_jobs=-1)(delayed(compute_single_grad)(i) for i in np.ndindex(param_dict[key].shape))
+                grad_dict[key] = np.array(grads).reshape(param_dict[key].shape)
+
+            return grad_dict
 
         prev_loss = float('inf')
+
         for t in range(1, max_iters + 1):
-            grad = compute_grad(p, x, target)
+            grad_dict = compute_grad(p, x, target)
 
-            m = beta1 * m + (1 - beta1) * grad
-            v = beta2 * v + (1 - beta2) * (grad ** 2)
+            for key in p:
+                m_dict[key] = beta1 * m_dict[key] + (1 - beta1) * grad_dict[key]
+                v_dict[key] = beta2 * v_dict[key] + (1 - beta2) * (grad_dict[key] ** 2)
 
-            m_hat = m / (1 - beta1 ** t)
-            v_hat = v / (1 - beta2 ** t)
+                m_hat = m_dict[key] / (1 - beta1 ** t)
+                v_hat = v_dict[key] / (1 - beta2 ** t)
 
-            p -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
-            # Apply constraints
-            if min_constrain is not None and max_constrain is not None:
-                p = np.clip(p, min_constrain, max_constrain)
+                p[key] -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
+                # Apply constraints if provided
+                if constrain is not None and key in constrain[0]:
+                    p[key] = np.clip(p[key], constrain[0][key], constrain[1][key])
 
             current_loss = loss(self, p, x, target)
+
             if t % 10 == 0 or t == 1:
                 print(f"Iteration {t}, Loss: {current_loss:.6f}")
 
-            if auto_stop and abs(prev_loss - current_loss) < rms_tol and current_loss < 0.1*prev_loss:
+            if auto_stop and abs(prev_loss - current_loss) < rms_tol:
                 print(f"Early stopping at iteration {t}. Loss improvement < {rms_tol}")
                 break
             prev_loss = current_loss
 
-        # Update model parameters
-        self.set_parameters(p)
+        # Final update to model
+        self.model_instance.parameters = p
+
         # Update Green's functions
-        self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt)
+        self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt, p=p)
 
         self.g = np.array(Parallel(n_jobs=-1)(
-            delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt) for trial_idx in range(self.n_trials)
+            delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt, p=p) for trial_idx in range(self.n_trials)
         ))
 
-        return self.parameters
+        return p

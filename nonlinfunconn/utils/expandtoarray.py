@@ -18,15 +18,19 @@ def expandtoarray(value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np
             ValueError: If the input array cannot be expanded to the target shape.
             TypeError: If the input is neither a scalar nor a NumPy array.
         """
+        if np.isscalar(shape):
+            shape = (shape, )
+
         if np.isscalar(value):
             return np.full(shape, value)
 
         if not isinstance(value, np.ndarray):
             raise TypeError(f"Expected scalar or numpy array, but got {type(value)}")
 
+
         if value.shape == shape:
             return value
-
+        
         if value.ndim == 1:
             out = np.zeros(shape)
             for i in range(shape[0]):
@@ -36,4 +40,5 @@ def expandtoarray(value: Union[float, np.ndarray], shape: Tuple[int, ...]) -> np
             raise ValueError(
                 f"1D array length {value.shape[0]} does not match either dimension of the target shape {shape}"
             )
+        
         

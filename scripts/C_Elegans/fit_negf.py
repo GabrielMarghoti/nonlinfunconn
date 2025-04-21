@@ -445,7 +445,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 5
+        lowering_resolution_step = 10
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -474,16 +474,21 @@ for (i_folder, folder) in enumerate(ds_list):
         params_after_fitting = lif_gf.ADAM_fit(x = Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
                         dt = lowering_resolution_step*fconn.Dt,
                         fit_linear_model=kwar_fit_lineal_model , 
-                        max_iters=40, 
+                        max_iters=100, 
                         include_adj_matrix=True, 
                         constrain = (min_constrain_dict, max_constrain_dict),
-                        learning_rate = 1e-1,
+                        #learning_rate = 1e-1,
                         #beta1 = 0.8,
                         #beta2 = 0.9,
-                        rms_tol=1e-3,
+                        rms_tol=1e-5,
                         loss_method='correlation'
                         )
-        
+        # Compute green functions using the higher time resolution, but the fitted parameters
+        lif_gf = nlfc.GreenFunctions(
+            model = LIF(n_responding, params_after_fitting),
+            x = Y_smooth_total[:, responding, shift_vol::],
+            dt = fconn.Dt,
+        )
         print('FIT DONE')
 
 #########################################################################################################################################################
@@ -582,7 +587,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
             # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
              for i in range(n_responding):
-                Y_nonlin_fit[ie_idx, i] = Y_smooth_total[ie_idx][j, shift_vol]
+                Y_nonlin_fit[ie_idx][i, :] = np.full_like(Y_nonlin_fit[ie_idx][i, :], Y_smooth_total[ie_idx][j, shift_vol])
                 for j in range(n_responding):
                     Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], Y_smooth_total[ie_idx][j, shift_vol:], dt=fconn.Dt)
                 j = 0 # consider only the stimulated neuron as source

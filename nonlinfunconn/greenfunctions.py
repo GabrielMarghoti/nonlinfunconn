@@ -48,7 +48,7 @@ class GreenFunctions:
         """
 
         self.n_trials, self.n_nodes, self.time_len = x.shape
-
+        self.dt = dt
         if not hasattr(model, "parameters"):
             raise TypeError("Model must be an instance of a class from the models subpackage.")
 

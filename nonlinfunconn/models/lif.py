@@ -64,9 +64,9 @@ class LIF:
         Vth     = self.parameters["Vth"]
 
         # Expand parameters to appropriate shapes
-        self.C       = expandtoarray(self.parameters["C"]      ,  num_nodes)
-        self.gamma   = expandtoarray(self.parameters["gamma"]  ,  num_nodes)
-        self.E_c     = expandtoarray(self.parameters["E_c"]    ,  num_nodes)
+        self.C       = expandtoarray(self.parameters["C"]      ,  (num_nodes))
+        self.gamma   = expandtoarray(self.parameters["gamma"]  ,  (num_nodes))
+        self.E_c     = expandtoarray(self.parameters["E_c"]    ,  (num_nodes))
         self.gamma_g = expandtoarray(self.parameters["gamma_g"], (num_nodes, num_nodes))
         self.gamma_s = expandtoarray(self.parameters["gamma_s"], (num_nodes, num_nodes))
         self.E_s     = expandtoarray(self.parameters["E_s"]    , (num_nodes, num_nodes))
@@ -234,14 +234,12 @@ class LIF:
         heaviside_func = self.heaviside(ts_diff)
 
         # Precompute gamma_sum[i] = scalar per neuron
-        gamma_sum = (
-            (self.gamma / self.C)[:, np.newaxis]
-            + np.sum((self.gamma_g / self.C), axis=1)[:, np.newaxis]
-            + np.sum((self.gamma_s / self.C) * self.S0, axis=1)[:, np.newaxis]
-        )
+        gamma_sum = (self.gamma / self.C) \
+            + np.sum((self.gamma_g / self.C[:, None]), axis=1) \
+            + np.sum((self.gamma_s / self.C[:, None]) * self.S0, axis=1)
 
         for i in range(self.num_neurons):
-            exp_factor_gs_gg = np.exp(-ts_diff * gamma_sum[i])  # (time_len, time_len)
+            exp_factor_gs_gg = np.exp(-ts_diff * gamma_sum[i]) 
 
             for j in range(self.num_neurons):
                 if i == j or (self.gamma_g[i, j] == 0 and self.gamma_s[i, j] == 0):

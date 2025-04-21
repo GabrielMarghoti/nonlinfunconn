@@ -247,8 +247,8 @@ class GreenFunctions:
         beta2: float = 0.999,
         eps: float = 1e-6,
         p0: Optional[np.ndarray] = None,
-        loss_method = 'correlation',
-    ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
+        loss_method = None,
+    ):
         """
         Fit the model using Adam gradient descent with parameter dict support.
         """
@@ -260,13 +260,9 @@ class GreenFunctions:
 
         target = x
 
-        parameter_to_fit_list = self.model_instance.parameters.keys() if parameter_to_fit_list is None else parameter_to_fit_list
-
-        for attr in parameter_to_fit_list:
-            if not hasattr(self.model_instance, attr):
-                raise AttributeError(f"Missing required class attribute: {attr}")
-
         p = self.model_instance.parameters if p0 is None else p0
+        if parameter_to_fit_list is not None:
+            p = {k: v for k, v in p.items() if k in parameter_to_fit_list}
 
         m_dict = {k: np.zeros_like(v) for k, v in p.items()}
         v_dict = {k: np.zeros_like(v) for k, v in p.items()}
@@ -306,7 +302,7 @@ class GreenFunctions:
                     err += np.sqrt(np.sum((Y_pred - Y_trial) ** 2)) / (self.n_trials * self.time_len * self.n_nodes)
             return err 
 
-        def compute_grad(param_dict, X, Y, epsilon=1e-6):
+        def compute_grad(param_dict, X, Y, epsilon=1e-4):
             loss_0 = loss(self, param_dict, X, Y)
             grad_dict = {}
 
@@ -356,7 +352,7 @@ class GreenFunctions:
             prev_loss = current_loss
 
         # Final update to model
-        self.model_instance.parameters = p
+        self.model_instance.parameters.update(p)
 
         # Update Green's functions
         self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt, p=p)
@@ -365,4 +361,4 @@ class GreenFunctions:
             delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt, p=p) for trial_idx in range(self.n_trials)
         ))
 
-        return p
+        return  self.model_instance.parameters

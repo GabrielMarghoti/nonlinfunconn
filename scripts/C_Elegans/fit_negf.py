@@ -445,7 +445,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 10
+        lowering_resolution_step = 5
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -471,18 +471,16 @@ for (i_folder, folder) in enumerate(ds_list):
                         "E_c": 100,  
                         }
 
-        params_after_fitting = lif_gf.ADAM_fit(x = Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
-                        dt = lowering_resolution_step*fconn.Dt,
-                        fit_linear_model=kwar_fit_lineal_model , 
-                        max_iters=100, 
-                        include_adj_matrix=True, 
-                        constrain = (min_constrain_dict, max_constrain_dict),
-                        #learning_rate = 1e-1,
-                        #beta1 = 0.8,
-                        #beta2 = 0.9,
-                        rms_tol=1e-5,
-                        loss_method='correlation'
-                        )
+        params_after_fitting = lif_gf.ADAM_fit(
+            x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
+            dt=lowering_resolution_step * fconn.Dt,
+            fit_linear_model=kwar_fit_lineal_model,
+            max_iters=100,
+            include_adj_matrix=True,
+            constrain=(min_constrain_dict, max_constrain_dict),
+            rms_tol=1e-5,
+            #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d']
+        )
         # Compute green functions using the higher time resolution, but the fitted parameters
         lif_gf = nlfc.GreenFunctions(
             model = LIF(n_responding, params_after_fitting),
@@ -587,19 +585,19 @@ for (i_folder, folder) in enumerate(ds_list):
 
             # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
              for i in range(n_responding):
-                Y_nonlin_fit[ie_idx][i, :] = np.full_like(Y_nonlin_fit[ie_idx][i, :], Y_smooth_total[ie_idx][j, shift_vol])
-                for j in range(n_responding):
-                    Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], Y_smooth_total[ie_idx][j, shift_vol:], dt=fconn.Dt)
-                j = 0 # consider only the stimulated neuron as source
-          
                 neu_i = responding[i]
-                neu_j = responding[j]
-                if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): 
-                    continue
-                #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-                #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                #nlfc.utils.plots.time_level_curves(time_fit, G[[ie_idx][i, j, :, :], G0[i, j, -1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
+                Y_nonlin_fit[ie_idx][i, :] = np.full_like(Y_nonlin_fit[ie_idx][i, :], Y_smooth_total[ie_idx][neu_i, shift_vol])
+                for j in range(n_responding):
+                    neu_j = responding[j]
+                    delta_j = Y_smooth_total[ie_idx][neu_j, shift_vol:] - Y_smooth_total[ie_idx][neu_j, shift_vol]
+                    Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=fconn.Dt)
+                
+                    if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): 
+                        continue
+                    #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                    nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
+                    #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
+                    #nlfc.utils.plots.time_level_curves(time_fit, G[[ie_idx][i, j, :, :], G0[i, j, -1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
 
         ###############
         # PREPARE PANELS PLOT

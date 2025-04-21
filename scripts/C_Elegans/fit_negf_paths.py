@@ -205,7 +205,7 @@ Ci = params['C'] # Membrane capacitance 1 F
 
 Ci = Ci*1e+12  ## kunert Farad for capacitance F what I noticed got numerical problems due to finite-precision of floating-point, so I convert to 1 pF = 1e-12 F
 
-Ci = 500*Ci # trick to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
+Ci = 400*Ci # trick to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
 
 Gcell = params['Gcell']*1e+12 # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
@@ -445,7 +445,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 20 
+        lowering_resolution_step = 20
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -456,8 +456,8 @@ for (i_folder, folder) in enumerate(ds_list):
                         "a_d": 0.0,  
                         "gamma_g": 0.0,
                         "gamma_s": 0.0,
-                        "E_s": -100,
-                        "E_c": -100,  
+                        "E_s": -120,
+                        "E_c": -120,  
                         }
         max_constrain_dict = {
                         "C": np.inf,          
@@ -467,23 +467,32 @@ for (i_folder, folder) in enumerate(ds_list):
                         "a_d": np.inf,  
                         "gamma_g": np.inf,
                         "gamma_s": np.inf,
-                        "E_s": 20,
-                        "E_c": 20,  
+                        "E_s": 100,
+                        "E_c": 100,  
                         }
 
-        lif_gf.ADAM_fit(x = Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
-                        dt = lowering_resolution_step*fconn.Dt,
-                        fit_linear_model=kwar_fit_lineal_model , 
-                        max_iters=30, 
-                        include_adj_matrix=True, 
-                        constrain = (min_constrain_dict, max_constrain_dict))
-        
+        params_after_fitting = lif_gf.ADAM_fit(
+            x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
+            dt=lowering_resolution_step * fconn.Dt,
+            fit_linear_model=kwar_fit_lineal_model,
+            max_iters=100,
+            include_adj_matrix=True,
+            constrain=(min_constrain_dict, max_constrain_dict),
+            rms_tol=1e-5,
+            #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d']
+        )
+        # Compute green functions using the higher time resolution, but the fitted parameters
+        lif_gf = nlfc.GreenFunctions(
+            model = LIF(n_responding, params_after_fitting),
+            x = Y_smooth_total[:, responding, shift_vol::],
+            dt = fconn.Dt,
+        )
         print('FIT DONE')
 
 #########################################################################################################################################################
         
         # plot neural network after fitting
-        nlfc.utils.netplots.neural_network(lif_gf.parameters["gamma_g"], lif_gf.parameters["gamma_s"], lif_gf.parameters["E_s"], np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
+        nlfc.utils.netplots.neural_network(params_after_fitting["gamma_g"], params_after_fitting["gamma_s"], params_after_fitting["E_s"], np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
     
         ####
         # Plot
@@ -576,18 +585,19 @@ for (i_folder, folder) in enumerate(ds_list):
 
             # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
              for i in range(n_responding):
-                for j in range(n_responding):
-                    Y_nonlin_fit[ie_idx, i, :] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], Y_smooth_total[ie_idx, j, shift_vol:], dt=fconn.Dt)
-                j = 0 # consider only the stimulated neuron as source
-          
                 neu_i = responding[i]
-                neu_j = responding[j]
-                if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): 
-                    continue
-                #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-                nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-                #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                #nlfc.utils.plots.time_level_curves(time_fit, G[[ie_idx][i, j, :, :], G0[i, j, -1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
+                Y_nonlin_fit[ie_idx][i, :] = np.full_like(Y_nonlin_fit[ie_idx][i, :], Y_smooth_total[ie_idx][neu_i, shift_vol])
+                for j in range(n_responding):
+                    neu_j = responding[j]
+                    delta_j = Y_smooth_total[ie_idx][neu_j, shift_vol:] - Y_smooth_total[ie_idx][neu_j, shift_vol]
+                    Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=fconn.Dt)
+                
+                    if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): 
+                        continue
+                    #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                    nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
+                    #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
+                    #nlfc.utils.plots.time_level_curves(time_fit, G[[ie_idx][i, j, :, :], G0[i, j, -1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
 
         ###############
         # PREPARE PANELS PLOT
@@ -760,32 +770,13 @@ for (i_folder, folder) in enumerate(ds_list):
         plt.close(fig2)        # Plot heatmaps for each neuron pair
 
         # Save parameters before fitting as a tab-delimited text file
-        params_before_fitting = {
-            "Ci": Ci,
-            "Gcell": Gcell,
-            "Ecell": Ecell,
-            "ggap": ggap,
-            "gsyn": gsyn,
-            "ar": ar,
-            "ad": ad,
-            "beta": beta,
-            "esynexc": esynexc,
-            "esyninh": esyninh,
-        }
+        params_before_fitting = kunert_parameters
+
         with open(os.path.join(main_dir, "params_before_fitting.txt"), "w") as f:
             f.write("Parameter\tValue\n")
             for key, value in params_before_fitting.items():
                 f.write(f"{key}\t{value}\n")
 
-        # Save lif_gf attributes after fitting as a tab-delimited text file
-        params_after_fitting = {
-            "C": lif_gf.C,
-            "gamma": lif_gf.gamma,
-            "beta": lif_gf.beta,
-            "E_c": lif_gf.E_c,
-            "a_r": lif_gf.a_r,
-            "a_d": lif_gf.a_d,
-        }
         with open(os.path.join(main_dir, "params_after_fitting.txt"), "w") as f:
             f.write("Parameter\tValue\n")
             for key, value in params_after_fitting.items():
@@ -796,8 +787,8 @@ for (i_folder, folder) in enumerate(ds_list):
         np.savetxt(os.path.join(main_dir, "gamma_s.txt"), gamma_s, delimiter="\t", fmt="%.6f")
         np.savetxt(os.path.join(main_dir, "Esyn.txt"), Esyn, delimiter="\t", fmt="%.6f")
 
-        np.savetxt(os.path.join(main_dir, "gamma_g_after_fitting.txt"), lif_gf.gamma_g, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "gamma_s_after_fitting.txt"), lif_gf.gamma_s, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "E_s_after_fitting.txt"), lif_gf.E_s, delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(main_dir, "gamma_g_after_fitting.txt"), params_after_fitting['gamma_g'], delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(main_dir, "gamma_s_after_fitting.txt"), params_after_fitting['gamma_s'], delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(main_dir, "E_s_after_fitting.txt"), params_after_fitting['E_s'], delimiter="\t", fmt="%.6f")
 
 

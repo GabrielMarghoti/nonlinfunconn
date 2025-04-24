@@ -88,8 +88,8 @@ class LIF:
         else:
             self.V0 = V0
         
-        if V0 == None:
-            self.S0 = _Seq
+        if S0 == None:
+            self.S0 = expandtoarray(_Seq, (num_nodes, num_nodes))
         else:
             self.S0 = expandtoarray(S0, (num_nodes, num_nodes))
 
@@ -250,8 +250,7 @@ class LIF:
                 Veq, Vth = self.V0[j], self.Vth[i, j]
 
                 # Synaptic exponential kernel
-                decay_rate = a_d - a_r / (1 + np.exp(-beta * (Veq - Vth)))
-                exp_factor_synaptic = np.exp(-ts_diff * decay_rate)
+                exp_factor_synaptic = np.exp(-ts_diff * (a_d - a_r / (1 + np.exp(-beta * (Veq - Vth)))))
 
                 # Synaptic kernel amplitude
                 synaptic_factor = a_r * (1 - self.S0[i, j]) * self.d_synaptic_activation(Veq, beta, Vth)
@@ -259,13 +258,10 @@ class LIF:
                 # Assign kernels
                 self.sigma0[i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
                 self.gg0[i, j] = heaviside_func * (self.gamma_g[i, j] / self.C[i]) * exp_factor_gs_gg
-                self.gs0[i, j] = heaviside_func * (self.gamma_s[i, j] / self.C[i]) * (self.E_s[i, j] - self.V0[i]) * exp_factor_gs_gg
-
-                # Final Green's function
-                self.g0[i, j] = self.gg0[i, j] + nontt_conv(self.gs0[i, j], self.sigma0[i, j], self.dt)
-        
+                self.gs0[i, j] = heaviside_func * (self.gamma_s[i, j] / self.C[i]) * (self.E_s[i, j] - self.V0[i]) * exp_factor_gs_gg     
                  
-                
+                self.g0 = self.gg0 + nontt_conv(self.gs0[i, j], self.sigma0[i, j], self.dt)
+
         return self.g0
 
     def compute_direct_green_functions(self, Vs,  dt = None, neu_i=None, neu_j=None, iteration_index_MAX=10, p=None, return_estimated_V=False):
@@ -311,38 +307,39 @@ class LIF:
                 non_zero = np.abs(delta_Vs[j]) >= 1e-4
 
                 synaptic_diff[non_zero] = (
-                    self.synaptic_activation(Vs[j], self.beta[i, j], self.Vth[i, j]) - 
-                    self.synaptic_activation(V0[None, j], self.beta[i, j], self.Vth[i, j])
+                    self.synaptic_activation(Vs[j, :], self.beta[i, j], self.Vth[i, j]) - 
+                    self.synaptic_activation(V0[j, None], self.beta[i, j], self.Vth[i, j])
                 )[non_zero] / delta_Vs[j][non_zero]
-
+                
                 prev_delta_S = np.copy(delta_Ss[i, j])
 
+                syn_act_j = self.d_synaptic_activation(V0[j], self.beta[i, j], self.Vth[i, j])
                 for _ in range(iteration_index_MAX):
-                    # Quotient for inverse synaptic kernel scaling
-                    quotient = self.d_synaptic_activation(V0[j] * np.ones(time_len), self.beta[i, j], self.Vth[i, j]) * synaptic_diff * (1 - delta_Ss[i, j] / (1 - self.S0[i, j]))
-
-                    valid = np.abs(quotient) >= 1e-4
-                    sigma[i, j][:, valid] = self.sigma0[i, j][:, valid] / quotient[None, valid]
+                    div_factor = (1 - (delta_Ss[i, j] / (1 - self.S0[i, j])))
+                    valid_indexes = np.abs(div_factor) >= 1e-5
+                    sigma[i, j][:, valid_indexes] = (
+                        self.sigma0[i, j][:, valid_indexes] / syn_act_j
+                    ) * (synaptic_diff * div_factor)[None, valid_indexes]
 
                     # Update delta_Ss
                     delta_Ss[i, j] = nontt_conv(sigma[i, j], delta_Vs[j], dt)
-
-                    if np.all(np.abs(delta_Ss[i, j] - prev_delta_S) < 1e-3):
+                    if np.all(np.abs(delta_Ss[i, j] - prev_delta_S) < 1e-4):
                         break
 
                     prev_delta_S = np.copy(delta_Ss[i, j])
 
                 # Compute π and g Green functions
                 factor   = 1 - (delta_Vs[i] / (self.E_s[i, j] - V0[i]))
-                pi[i, j] = nontt_conv(self.gs0[i, j], factor[:, None] * sigma[i, j], dt)
+                pi[i, j] = nontt_conv(self.gs0[i, j], factor[None, :] * sigma[i, j], dt)
                 g[i, j]  = self.gg0[i, j] + pi[i, j]
-               
+
+            
         if return_estimated_V:
             est_V = np.zeros_like(Vs)
             for i in range(num_neurons):
                 est_V[i, :] += V0[i]
                 for j in range(num_neurons):
-                    est_V[i, :] += nontt_conv(g[i, j], delta_Vs[j, :], dt)
+                    est_V[i] += nontt_conv(g[i, j], delta_Vs[j], dt)
 
             return g, est_V
 

@@ -29,11 +29,11 @@ class nontt_conv(np.ndarray):
         # case K2 is another kernel
         if K1.shape == K2.shape:
             for t in range(resolution):
-                for t_prime in range(t):  
-                    out[t, t_prime] = integral(K1[t, t_prime:t]*K2[t_prime:t, t_prime], dt, 8)  
+                for t_prime in range(t+1):  
+                    out[t, t_prime] = integral(K1[t, t_prime:t] * K2[t_prime:t, t_prime], dt, 8)  
         # case K2 is the signal
         else:  
             for t in range(resolution):
-                out[t] = integral(K1[t, :t]*K2[:t], dt, 8)  # Fix slicing
+                out[t] = integral(K1[t, :t] * K2[:t], dt, 8)
             
         return out

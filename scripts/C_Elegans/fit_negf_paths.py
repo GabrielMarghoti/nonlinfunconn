@@ -10,8 +10,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import matplotlib.cm as cm
-import matplotlib.colors as mcolors
-from scipy.integrate import simps
 import os, sys, time, json
 
 import pumpprobe as pp
@@ -203,18 +201,18 @@ else:
 # Cell
 Ci = params['C'] # Membrane capacitance 1 F
 
-Ci = Ci*1e+12  ## kunert Farad for capacitance F what I noticed got numerical problems due to finite-precision of floating-point, so I convert to 1 pF = 1e-12 F
+Ci = 1e12*Ci  # pF
 
-Ci = 400*Ci # trick to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
+Ci = 100*Ci #  to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
 
-Gcell = params['Gcell']*1e+12 # Leakage conductance of membrane [pS]
+Gcell = 1e12*params['Gcell'] # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
 
 # Electrical synapses
-ggap = params['ggap']*1e+12 # conductivity of electrical synapse [pS]
+ggap = 1e12*params['ggap'] # conductivity of electrical synapse [pS]
 
 # Chemical synapses
-gsyn = params['gsyn']*1e+12 # "conductivity" of chemical synapse [pS]
+gsyn = 1e12*params['gsyn'] # "conductivity" of chemical synapse [pS]
 ar = params['ar'] # activation rate of synapses [s^-1]
 ad = params['ad'] # deactivation rate of synapses [s^-1]
 beta = params['beta']/1000 # width of synaptic activation [mV^-1]
@@ -306,9 +304,9 @@ for (i_folder, folder) in enumerate(ds_list):
 
         # Ensure output directory exists
         if not kwar_fit_lineal_model:
-            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/negf_fit/"
+            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/negf_fit_PATHS/"
         else:
-            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/equilibirum_gf_fit/"
+            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/equilibirum_gf_fit_PATHS/"
 
         ie_dir_list = []
 
@@ -364,7 +362,7 @@ for (i_folder, folder) in enumerate(ds_list):
         
         n_responding = len(responding)
 
-        if n_responding > 6 or n_responding <2:
+        if n_responding > 10 or n_responding < 4:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
@@ -414,6 +412,8 @@ for (i_folder, folder) in enumerate(ds_list):
 
         Y_nonlin_fit = np.zeros_like(Y_smooth_total[:, responding, shift_vol:])
 
+        G_degree = 2
+
         # initialize the greenfunctions class, computing the direct green functions of ecery tryal and every neuron pair interaction
         lif_gf = nlfc.GreenFunctions(
             model = LIF(n_responding, kunert_parameters),
@@ -421,6 +421,7 @@ for (i_folder, folder) in enumerate(ds_list):
             dt = fconn.Dt,
         )
 
+        G  = lif_gf.total_G(G_degree)
 
         for ie_idx, ie in enumerate(stimulations_idx):
              
@@ -430,22 +431,18 @@ for (i_folder, folder) in enumerate(ds_list):
                 for j in range(n_responding):
                     neu_i = responding[i]
                     neu_j = responding[j]
-                    if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): 
-                        continue
-                    #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
+                    if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): continue
                     nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-                    #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                    #nlfc.utils.plots.time_level_curves(time_fit, G[[ie_idx][i, j, :, :], G0[i, j, -1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-    
+                    nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
 
-        G_degree = 2
+
 
 #########################################################################################################################################################
         
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 20
+        lowering_resolution_step = 10
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -475,11 +472,12 @@ for (i_folder, folder) in enumerate(ds_list):
             x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
             dt=lowering_resolution_step * fconn.Dt,
             fit_linear_model=kwar_fit_lineal_model,
-            max_iters=100,
+            max_iters=30,
             include_adj_matrix=True,
             constrain=(min_constrain_dict, max_constrain_dict),
             rms_tol=1e-5,
-            #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d']
+            #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d'],
+            #loss_method='correlation'
         )
         # Compute green functions using the higher time resolution, but the fitted parameters
         lif_gf = nlfc.GreenFunctions(
@@ -581,6 +579,8 @@ for (i_folder, folder) in enumerate(ds_list):
         #G = lif_gf.total_G(G_degree) 
         #G0 = lif_gf.total_G(G_degree, linear_model=True)
 
+        G  = lif_gf.total_G(G_degree)
+
         for ie_idx, ie in enumerate(stimulations_idx):
 
             # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
@@ -592,12 +592,12 @@ for (i_folder, folder) in enumerate(ds_list):
                     delta_j = Y_smooth_total[ie_idx][neu_j, shift_vol:] - Y_smooth_total[ie_idx][neu_j, shift_vol]
                     Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=fconn.Dt)
                 
-                    if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): 
+                    if i == 0 or (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-04)): 
                         continue
                     #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
                     nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
                     #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                    #nlfc.utils.plots.time_level_curves(time_fit, G[[ie_idx][i, j, :, :], G0[i, j, -1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
+                    nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
 
         ###############
         # PREPARE PANELS PLOT

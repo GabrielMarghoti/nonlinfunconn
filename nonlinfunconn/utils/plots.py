@@ -31,8 +31,8 @@ def time_level_curves(time, G, G0, xlabel, ylabel, title, save_path = None):
             continue
         
         color = to_rgba((t_idx / len(time), 0, 1 - (2 * t_idx / len(time) - 1) ** 2, 1))
-        x_vals = time[t_idx] - time[:t_idx]
-        y_vals = G[t_idx, :t_idx]
+        x_vals = time[t_idx] - time[:t_idx+1]
+        y_vals = G[t_idx, :t_idx+1]
 
         if y_vals.size == 0:  # Avoid empty array errors
             continue
@@ -62,9 +62,9 @@ def time_level_curves(time, G, G0, xlabel, ylabel, title, save_path = None):
     
     # Adjust x-axis limits
     plt.xlim([0, xlim_max])
-
-    # Legend at top-right, outside the plot
-    plt.legend(bbox_to_anchor=(1, 1), loc='upper left', borderaxespad=0.)
+    
+    # Legend at top-right, inside the plot
+    plt.legend(loc='upper right', borderaxespad=0.)
 
     plt.grid(False)
     plt.box(True)

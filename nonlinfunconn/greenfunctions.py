@@ -1,9 +1,8 @@
 import numpy as np
-from typing import Optional, Tuple, Union
-import copy
+from typing import Optional, Tuple
+
 from joblib import Parallel, delayed
 
-from nonlinfunconn import convolution
 from .utils.nontt_conv import  nontt_conv
 
 
@@ -148,7 +147,7 @@ class GreenFunctions:
 
             return _G_k_j
             
-    def total_G(self, max_paths_len, linear_model=False, node_pair = "all"):
+    def total_G(self, max_paths_len, node_pair = "all", use_equilibrium = False):   
         """
         Computes the effective non-equilibrium Green's function (NEGF) up to a specified order.
 
@@ -160,26 +159,27 @@ class GreenFunctions:
         Returns:
         - np.ndarray: Effective Green's function matrix up to a maximum path length 'max_path_len'
         """
+        # Initialize the effective Green's function with the first-order Green's function
+        _G = np.copy(self.g0) if use_equilibrium else np.copy(self.g)
+        _g = np.copy(self.g0) if use_equilibrium else np.copy(self.g)
         if node_pair == "all":
-            G = np.copy(self.g0) if linear_model else np.copy(self.g) # First-order Green's function is the direct one
-            _g = np.copy(self.g0) if linear_model else np.copy(self.g)
-            num_eff_nodes = G.shape[-1]
+            num_eff_nodes = G.shape[0]
 
-            def compute_trial_update(trial_idx):
-                G_trial = np.copy(G[trial_idx])
+            def compute_trial_update(g_trial):
+                G_trial = g_trial.copy()
                 for _ in range(2, max_paths_len + 1):
                     for i in range(num_eff_nodes):
                         for j in range(num_eff_nodes):
                             if i == j:
                                 continue  # Avoids self loops
                             for k in range(num_eff_nodes):
-                                if np.all(_g[i, k, :, :] == 0) or np.all(G_trial[k, j, :, :] == 0):
+                                if np.all(g_trial[i, k] == 0) or np.all(G_trial[k, j] == 0):
                                     continue  # Ensure connectivity exists before doing the computation
                                 # Iterative update of Green's function while preventing revisits
-                                G_trial[i, j] += nontt_conv(_g[i, k], G_trial[k, j], self.dt)
+                                G_trial[i, j] += nontt_conv(g_trial[i, k], G_trial[k, j], self.dt)
                 return G_trial
 
-            G = np.array(Parallel(n_jobs=-1)(delayed(compute_trial_update)(trial_idx) for trial_idx in range(self.n_trials)))
+            G = np.array(Parallel(n_jobs=-1)(delayed(compute_trial_update)(self.g[trial_idx]) for trial_idx in range(self.n_trials)))
         else:
 
             i, j = node_pair
@@ -189,7 +189,7 @@ class GreenFunctions:
             def compute_trial_update(trial_idx):
                 G_trial = np.copy(G[trial_idx])
                 for path in paths:
-                    G_trial[i, j, :, :] += self.path_G(path, trial_idx)
+                    G_trial[i, j] += self.path_G(path, trial_idx)
                 return G_trial
 
             G = np.array(Parallel(n_jobs=-1)(
@@ -240,12 +240,12 @@ class GreenFunctions:
         rms_limits: Optional[Tuple[int, int]] = None,
         constrain=None, 
         auto_stop: bool = True,
-        rms_tol: float = 1e-4,
+        rms_tol: float = 1e-5,
         max_iters: int = 1000,
-        learning_rate: float = 1e-2,
+        learning_rate: float = 1e-3,
         beta1: float = 0.9,
         beta2: float = 0.999,
-        eps: float = 1e-6,
+        eps: float = 1e-5,
         p0: Optional[np.ndarray] = None,
         loss_method = None,
     ):
@@ -289,7 +289,7 @@ class GreenFunctions:
                     g0 = variant_self.compute_direct_equilibrium_green_functions(num_nodes=self.n_nodes, time_len=Y_trial.shape[1], dt=dt, p=p)
                     est_V = np.zeros((variant_self.num_nodes, self.time_len)) 
                     for i in range(variant_self.num_nodes):
-                        est_V[i] += self.Veq[i]
+                        est_V[i] += X_trial[:, [0]]
                         for j in range(variant_self.num_nodes):
                             est_V[i] += nontt_conv(g0[i, j], delta_X[j], dt)
                     Y_pred = est_V
@@ -299,22 +299,31 @@ class GreenFunctions:
                 if loss_method == 'correlation':
                     err += correlation_loss(Y_pred, Y_trial)
                 else:
-                    err += np.sqrt(np.sum((Y_pred - Y_trial) ** 2)) / (self.n_trials * self.time_len * self.n_nodes)
+                    err += sum(np.sqrt(np.sum((Y_pred - Y_trial) ** 2, 0))) / (self.n_trials * self.time_len * self.n_nodes)
             return err 
 
-        def compute_grad(param_dict, X, Y, epsilon=1e-4):
+        def compute_grad(param_dict, X, Y,param_scale =None, epsilon_factor=1e-4):
             loss_0 = loss(self, param_dict, X, Y)
             grad_dict = {}
+            epsilon = {}
 
             for key in param_dict:
                 grad_dict[key] = np.zeros_like(param_dict[key])
+                if param_scale is not None:
+                    max_val = param_scale[key]
+                else:
+                    max_val = np.max(np.abs(param_dict[key])) if np.max(np.abs(param_dict[key])) > 0 else 1.0
+                epsilon[key] = epsilon_factor * max_val
 
-                def compute_single_grad(idx):
-                    perturbed = copy.deepcopy(param_dict)
-                    perturbed[key] = param_dict[key].copy()
-                    perturbed[key][idx] += epsilon
-                    loss_eps = loss(copy.deepcopy(self), perturbed, X, Y)
-                    return (loss_eps - loss_0) / epsilon
+            def compute_single_grad(idx):
+                perturbed = copy.deepcopy(param_dict)
+                perturbed[key] = param_dict[key].copy()
+                perturbed[key][idx] += epsilon[key]
+                loss_eps = loss(copy.deepcopy(self), perturbed, X, Y)
+                return (loss_eps - loss_0) / epsilon[key]
+            
+
+            for key in param_dict:
 
                 if np.isscalar(param_dict[key]):
                     grads = [compute_single_grad(0)]
@@ -327,16 +336,19 @@ class GreenFunctions:
         prev_loss = float('inf')
 
         for t in range(1, max_iters + 1):
-            grad_dict = compute_grad(p, x, target)
-
-            for key in p:
+            param_scale = {}
+            for key in p:           
+                param_scale[key] = np.mean(np.abs(p[key])) if np.mean(np.abs(p[key])) > 0 else 1.0
+            
+            grad_dict = compute_grad(p, x, target, param_scale=param_scale, epsilon_factor=eps)
+            for key in p:  
                 m_dict[key] = beta1 * m_dict[key] + (1 - beta1) * grad_dict[key]
                 v_dict[key] = beta2 * v_dict[key] + (1 - beta2) * (grad_dict[key] ** 2)
 
                 m_hat = m_dict[key] / (1 - beta1 ** t)
                 v_hat = v_dict[key] / (1 - beta2 ** t)
 
-                p[key] -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
+                p[key] -= learning_rate * param_scale[key] * m_hat / (np.sqrt(v_hat) + eps*param_scale[key])
                 # Apply constraints if provided
                 if constrain is not None and key in constrain[0]:
                     p[key] = np.clip(p[key], constrain[0][key], constrain[1][key])

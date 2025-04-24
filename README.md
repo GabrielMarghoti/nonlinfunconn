@@ -21,16 +21,10 @@ sudo python3 setup.py install
 ```
 
 ## Usage
-### Convolution Kernel Fitting
-```python
-from kernel_fitting import fit_kernel
-kernel = fit_kernel(data, method='gaussian')
-```
 
 ### Nonequilibrium Green Functions
 ```python
-from negf import compute_green_function
-green_function = compute_green_function(network, parameters)
+TODO
 ```
 
 ### Data for *C. elegans* Brain Analysis

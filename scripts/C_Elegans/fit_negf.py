@@ -366,7 +366,7 @@ for (i_folder, folder) in enumerate(ds_list):
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
-        if '' in labels[responding]:
+        if any(label == '' for label in np.array(labels)[responding]):
             print(f"Skipping dataset {folder} with some responding neuron not identified.")
             continue
 
@@ -451,7 +451,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 10
+        lowering_resolution_step = 20
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -481,10 +481,10 @@ for (i_folder, folder) in enumerate(ds_list):
             x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
             dt=lowering_resolution_step * fconn.Dt,
             fit_linear_model=kwar_fit_lineal_model,
-            max_iters=500,
+            max_iters=100,
             include_adj_matrix=True,
             constrain=(min_constrain_dict, max_constrain_dict),
-            rms_tol=1e-5,
+            rms_tol=1e-4,
             #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d'],
             #loss_method='correlation'
         )

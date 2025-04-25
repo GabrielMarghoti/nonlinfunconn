@@ -130,6 +130,7 @@ class GreenFunctions:
         """
         if linear_model:
             _g = np.copy(self.g0) if linear_model else np.copy(self.g)
+            
         elif trial_idx is not None:
             _g = np.copy(self.g[trial_idx])
             _G_k_j = _g[path[1], path[0], :, :]

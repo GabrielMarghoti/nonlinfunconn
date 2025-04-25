@@ -304,9 +304,9 @@ for (i_folder, folder) in enumerate(ds_list):
 
         # Ensure output directory exists
         if not kwar_fit_lineal_model:
-            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/negf_fit_PATHS/"
+            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/PATHS_negf_fit/"
         else:
-            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/equilibirum_gf_fit_PATHS/"
+            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/PATHS_equilibirum_gf_fit/"
 
         ie_dir_list = []
 
@@ -362,8 +362,12 @@ for (i_folder, folder) in enumerate(ds_list):
         
         n_responding = len(responding)
 
-        if n_responding > 10 or n_responding < 4:
+        if n_responding > 12 or n_responding < 5:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
+            continue
+
+        if '' in labels[responding]:
+            print(f"Skipping dataset {folder} with some responding neuron not indentfied.")
             continue
 
         os.makedirs(main_dir, exist_ok=True)
@@ -423,6 +427,8 @@ for (i_folder, folder) in enumerate(ds_list):
 
         G  = lif_gf.total_G(G_degree)
 
+        #G_paths = lif_gf.path_G()
+
         for ie_idx, ie in enumerate(stimulations_idx):
              
             os.makedirs(ie_dir_list[ie_idx], exist_ok=True)
@@ -442,7 +448,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 10
+        lowering_resolution_step = 20
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -472,7 +478,7 @@ for (i_folder, folder) in enumerate(ds_list):
             x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
             dt=lowering_resolution_step * fconn.Dt,
             fit_linear_model=kwar_fit_lineal_model,
-            max_iters=30,
+            max_iters=500,
             include_adj_matrix=True,
             constrain=(min_constrain_dict, max_constrain_dict),
             rms_tol=1e-5,

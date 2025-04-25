@@ -337,10 +337,10 @@ for (i_folder, folder) in enumerate(ds_list):
 
         responding = list(responding)
         
+        # Insert the stimulated neuron at the beginning of the responding list
         responding.remove(stim)
         responding.insert(0, stim)
-
-        # Consider only second order neighbors of stimulated node
+        
 
         # Find first neighbors (nodes connected to stim via either gap or syn)
         first_neighbors = np.where((Ggap[:, stim] > 0) | (Gsyn[:, stim] > 0))[0]
@@ -362,11 +362,13 @@ for (i_folder, folder) in enumerate(ds_list):
         
         n_responding = len(responding)
 
-        if n_responding > 10 or n_responding < 4:
+        if n_responding > 12 or n_responding < 5:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
-        os.makedirs(main_dir, exist_ok=True)
+        if '' in labels[responding]:
+            print(f"Skipping dataset {folder} with some responding neuron not identified.")
+            continue
 
         # plot complete neural network 
         #nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(main_dir, f'Neural_Network_total.png'))
@@ -376,7 +378,6 @@ for (i_folder, folder) in enumerate(ds_list):
 
         responses_correlations = np.zeros((n_responding, num_stimulations, num_stimulations))
         trial_variations = np.zeros(n_responding)
-        common_trials = np.zeros(n_responding, dtype=int)
 
         for i in range(n_responding):
             neu_i = responding[i]
@@ -391,7 +392,15 @@ for (i_folder, folder) in enumerate(ds_list):
         most_variable_neuron = responding[most_variable_neuron_idx] 
 
         print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
+
+
+        if np.mean(responses_correlations[0]) < 0.6:
+            print(f"Skipping dataset {folder} with low stimuli correlations.")
+            continue
         
+
+        os.makedirs(main_dir, exist_ok=True)
+
 
         # save connectome based network considering only responsive neurons over all stimulations
         gamma_g = (Ggap*ggap)[responding][:, responding] 
@@ -442,7 +451,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 20
+        lowering_resolution_step = 10
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -472,7 +481,7 @@ for (i_folder, folder) in enumerate(ds_list):
             x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
             dt=lowering_resolution_step * fconn.Dt,
             fit_linear_model=kwar_fit_lineal_model,
-            max_iters=200,
+            max_iters=500,
             include_adj_matrix=True,
             constrain=(min_constrain_dict, max_constrain_dict),
             rms_tol=1e-5,

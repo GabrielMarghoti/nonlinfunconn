@@ -81,7 +81,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         node_strengths[j] = np.sum(np.abs(Ggap[:, j])) + np.sum(np.abs(Gsyn[:, j]))
     
     # Normalize node sizes to a reasonable range (e.g., 100 to 1000)
-    min_size, max_size = 100, 500
+    min_size, max_size = 1000, 2000
     if np.max(node_strengths) > 0:
         node_sizes = min_size + (max_size - min_size) * (node_strengths - np.min(node_strengths)) / (np.max(node_strengths) - np.min(node_strengths))
     else:
@@ -126,11 +126,11 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         Line2D([0], [0], color=cm.get_cmap('coolwarm')(0.0), lw=2, label='Inhibitory chemical synapse'),
         Line2D([0], [0], color=cm.get_cmap('coolwarm')(1.0), lw=2, label='Excitatory chemical synapse')
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=8)
+    ax.legend(handles=legend_elements, loc='best', fontsize=12)
 
     # Draw labels if provided
     if labels is not None and len(labels) > 0:    
-        nx.draw_networkx_labels(G, pos, ax=ax, labels=labels, font_size=8, font_color='black')
+        nx.draw_networkx_labels(G, pos, ax=ax, labels=labels, font_size=12, font_color='black')
     
     # Remove axis
     ax.axis('off')

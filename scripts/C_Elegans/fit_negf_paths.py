@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import matplotlib.cm as cm
 import os, sys, time, json
+import pickle # for cache saving/loading
 
 import pumpprobe as pp
 import wormdatamodel as wormdm
@@ -32,11 +33,18 @@ merge = "--no-merge" not in sys.argv
 ds_exclude_tags =  None
 kwar_fit_lineal_model  = "--fit-linear" in sys.argv
 
+load_cache = "--load-cache" in sys.argv
+
 aconn_ds_i = None # default is loading from funatlas, if aconn_ds_i is set, it will load from the specified dataset
 # default 
-output_folder = "figures/"
+figures_folder = "figures/C_elegans_pumpprobre_exp/"
+data_folder = "data/C_elegans_pumpprobre_exp/"
 
-ds_list_path =  "/home/gabrielm/paper_reproduction/ds_list_unc31.txt" if "--unc31" in sys.argv else "/home/gabrielm/paper_reproduction/ds_list_full.txt"
+ds_list_path = (
+    "/home/gabrielm/paper_reproduction/ds_list_unc31.txt" if "--unc31" in sys.argv 
+    else "/home/gabrielm/paper_reproduction/ds_list_wt.txt" if "--wt" in sys.argv 
+    else "/home/gabrielm/paper_reproduction/ds_list_full.txt"
+)
 ds_list_spont_path = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
 
 
@@ -45,7 +53,7 @@ for arg in sys.argv:
     if _arg[0] == "--matchless-nan-th": 
         matchless_nan_th = float(_arg[1])
     elif _arg[0] == "--folder:":
-        output_folder = _arg[1]
+        figures_folder = _arg[1]
     if _arg[0] == "--aconn-ds-i": 
         aconn_ds_i=int(_arg[1])
 
@@ -66,6 +74,19 @@ def rolling_window(a, window):
     strides = a.strides + (a.strides[-1],)
     return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
 
+def parse_neuron_positions(filepath):
+    neuron_positions = {}
+    with open(filepath, 'r') as file:
+        lines = file.readlines()
+        # First line contains neuron labels
+        neuron_labels = lines[0].strip().split()
+        if neuron_labels[0].startswith("#"):
+            neuron_labels[0] = neuron_labels[0][1:]
+        # Remaining lines contain the coordinates
+        for label, coord_line in zip(neuron_labels, lines[1:]):
+            coords = tuple(map(float, coord_line.strip().split()))
+            neuron_positions[label] = coords
+    return neuron_positions
 
 def load_ds_list(fname,tags=None,exclude_tags=None,return_tags=False):
     '''Loads the list of dataset folder names given the filename of a 
@@ -226,6 +247,8 @@ esyninh = params['esyninh']*1000 # reverse potential for inhibitory synapses
 Esyn = np.ones((funa.n_neurons,funa.n_neurons))*esynexc
 Esyn[sign<0] = esyninh
 
+# Dict with neurons positions
+anatlas_positions = parse_neuron_positions(funa.module_folder + "anatlas_neuron_positions.txt")
 
 kunert_parameters = {
     "C": Ci,          
@@ -239,8 +262,7 @@ kunert_parameters = {
 # Iterate over the folders whcih contains each experiment data
 for (i_folder, folder) in enumerate(ds_list):
 
-    #if '20211104_163944' not in folder: continue # use only folder of waterfall fig1
-    if '20220511_150909' in folder: continue # problem with this data, not sure if bug in the code or just bad dataset
+    #if '20220511_150909' in folder: continue # problem with this data, not sure if bug in the code or just bad dataset
 
     # Create functional connectome
     fconn = pp.Fconn.from_file(folder)
@@ -281,7 +303,7 @@ for (i_folder, folder) in enumerate(ds_list):
         num_stimulations = len(stimulations_idx)
 
         # Skip datasets where the number of stimulations is not between 2 and 3
-        if not (2 <= num_stimulations <= 3): 
+        if not (2 <= num_stimulations <= 4): 
             continue
 
         stim_neuron_label = labels[stim]
@@ -302,11 +324,14 @@ for (i_folder, folder) in enumerate(ds_list):
         time_fit = np.arange(time_plt_len- shift_vol) * fconn.Dt  
         time_fit_len = len(time_fit)
 
-        # Ensure output directory exists
-        if not kwar_fit_lineal_model:
-            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/PATHS_negf_fit/"
-        else:
-            main_dir = output_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/PATHS_equilibirum_gf_fit/"
+        #  Set output directories
+        fig_dir = figures_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/fit_negf"
+        data_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/fit_negf"
+        if kwar_fit_lineal_model:
+            fig_dir += "_equilibirum"
+            data_dir += "_equilibirum"
+        fig_dir   += "/"
+        data_dir  += "/"
 
         ie_dir_list = []
 
@@ -320,7 +345,7 @@ for (i_folder, folder) in enumerate(ds_list):
             n_responding_ie = len(responding_ie)
             
             # Ensure output directory exists
-            ie_dir = main_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
+            ie_dir = fig_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
 
             ie_dir_list.append(ie_dir)
                 
@@ -337,10 +362,10 @@ for (i_folder, folder) in enumerate(ds_list):
 
         responding = list(responding)
         
+        # Insert the stimulated neuron at the beginning of the responding list
         responding.remove(stim)
         responding.insert(0, stim)
-
-        # Consider only second order neighbors of stimulated node
+        
 
         # Find first neighbors (nodes connected to stim via either gap or syn)
         first_neighbors = np.where((Ggap[:, stim] > 0) | (Gsyn[:, stim] > 0))[0]
@@ -362,25 +387,22 @@ for (i_folder, folder) in enumerate(ds_list):
         
         n_responding = len(responding)
 
-        if n_responding > 12 or n_responding < 5:
+        if n_responding > 15 or n_responding < 4:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
-        if '' in labels[responding]:
-            print(f"Skipping dataset {folder} with some responding neuron not indentfied.")
+        if any(label == '' for label in np.array(labels)[responding]):
+            print(f"Skipping dataset {folder} with some responding neuron not identified.")
             continue
 
-        os.makedirs(main_dir, exist_ok=True)
-
         # plot complete neural network 
-        #nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(main_dir, f'Neural_Network_total.png'))
+        #nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(fig_dir, f'Neural_Network_total.png'))
 
         Y_total = np.concatenate(Y_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
         Y_smooth_total = np.concatenate(Y_smooth_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
 
         responses_correlations = np.zeros((n_responding, num_stimulations, num_stimulations))
         trial_variations = np.zeros(n_responding)
-        common_trials = np.zeros(n_responding, dtype=int)
 
         for i in range(n_responding):
             neu_i = responding[i]
@@ -395,7 +417,33 @@ for (i_folder, folder) in enumerate(ds_list):
         most_variable_neuron = responding[most_variable_neuron_idx] 
 
         print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
+
+
+        if np.mean(responses_correlations[0]) < 0.6:
+            print(f"Skipping dataset {folder} with low stimuli correlations.")
+            continue
         
+        # Responding parameters positions
+        # review: consider the most similar labels if it does not match exactly
+        responding_positions = []
+        for i in responding:
+            for key in anatlas_positions:
+                if labels[i].startswith(key):
+                    responding_positions.append(anatlas_positions[key])
+                    break
+                elif key.startswith(labels[i]):
+                    responding_positions.append(anatlas_positions[key])
+                    break
+
+        responding_positions = np.array(responding_positions)
+
+        responding_positions = np.array(responding_positions)
+        distance_matrix = np.linalg.norm(responding_positions[:, np.newaxis, :] - responding_positions[np.newaxis, :, :], axis=-1)
+
+        # Ensure the directories for figures and data exist
+        os.makedirs(fig_dir, exist_ok=True)
+        os.makedirs(data_dir, exist_ok=True)
+
 
         # save connectome based network considering only responsive neurons over all stimulations
         gamma_g = (Ggap*ggap)[responding][:, responding] 
@@ -403,15 +451,27 @@ for (i_folder, folder) in enumerate(ds_list):
         Es = Esyn[responding][:, responding]
 
         # Plot gamma_g and gamma_s as heatmaps
-        nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(main_dir, 'gamma_g_gamma_s_heatmaps.png'))
+        nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(fig_dir, 'gamma_g_gamma_s_heatmaps.png'))
         # plot neural network
-        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only.png'))
+        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], positions=responding_positions[:, :2], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only.png'))
         
         kunert_parameters.update({
             "gamma_g": gamma_g,
             "gamma_s": gamma_s,
             "E_s": Es
         })
+
+        model_parameters = kunert_parameters.copy()
+
+        if load_cache:
+            # Check if the cache file exists
+            cache_file_path = os.path.join(data_dir, "fitted_parameters.pkl")
+            if os.path.exists(cache_file_path):
+                # Load parameters after fitting from the .pkl file
+                with open(cache_file_path, "rb") as f:  # 'rb' not 'r'
+                    model_parameters = pickle.load(f)
+            else:
+                print(f"Warning: Cache file '{cache_file_path}' does not exist. Proceeding without loading cached parameters.")
 
 
         Y_nonlin_fit = np.zeros_like(Y_smooth_total[:, responding, shift_vol:])
@@ -420,14 +480,12 @@ for (i_folder, folder) in enumerate(ds_list):
 
         # initialize the greenfunctions class, computing the direct green functions of ecery tryal and every neuron pair interaction
         lif_gf = nlfc.GreenFunctions(
-            model = LIF(n_responding, kunert_parameters),
+            model = LIF(n_responding, model_parameters),
             x = Y_smooth_total[:, responding, shift_vol::],
             dt = fconn.Dt,
         )
 
         G  = lif_gf.total_G(G_degree)
-
-        #G_paths = lif_gf.path_G()
 
         for ie_idx, ie in enumerate(stimulations_idx):
              
@@ -470,24 +528,24 @@ for (i_folder, folder) in enumerate(ds_list):
                         "a_d": np.inf,  
                         "gamma_g": np.inf,
                         "gamma_s": np.inf,
-                        "E_s": 100,
+                        "E_s": 20,
                         "E_c": 100,  
                         }
 
-        params_after_fitting = lif_gf.ADAM_fit(
+        fitted_parameters = lif_gf.ADAM_fit(
             x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
             dt=lowering_resolution_step * fconn.Dt,
             fit_linear_model=kwar_fit_lineal_model,
-            max_iters=500,
+            max_iters=100,
             include_adj_matrix=True,
             constrain=(min_constrain_dict, max_constrain_dict),
-            rms_tol=1e-5,
+            rms_tol=1e-4,
             #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d'],
             #loss_method='correlation'
         )
         # Compute green functions using the higher time resolution, but the fitted parameters
         lif_gf = nlfc.GreenFunctions(
-            model = LIF(n_responding, params_after_fitting),
+            model = LIF(n_responding, fitted_parameters),
             x = Y_smooth_total[:, responding, shift_vol::],
             dt = fconn.Dt,
         )
@@ -496,7 +554,7 @@ for (i_folder, folder) in enumerate(ds_list):
 #########################################################################################################################################################
         
         # plot neural network after fitting
-        nlfc.utils.netplots.neural_network(params_after_fitting["gamma_g"], params_after_fitting["gamma_s"], params_after_fitting["E_s"], np.array(labels)[responding], positions=None, save_path=os.path.join(main_dir, f'Neural_Network_responding_only_after_fit.png'))
+        nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], np.array(labels)[responding], positions=responding_positions[:, :2], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit.png'))
     
         ####
         # Plot
@@ -770,31 +828,68 @@ for (i_folder, folder) in enumerate(ds_list):
         # Save plot with neuron index in filename
         filename = f"panels_mult_stimulation_fits.png"
         filename2 = f"most_variable_neuron_response.png"
-        fig.savefig(os.path.join(main_dir, filename), bbox_inches="tight")
+        fig.savefig(os.path.join(fig_dir, filename), bbox_inches="tight")
         plt.close(fig)        # Plot heatmaps for each neuron pair
-        fig2.savefig(os.path.join(main_dir, filename2), bbox_inches="tight")
+        fig2.savefig(os.path.join(fig_dir, filename2), bbox_inches="tight")
         plt.close(fig2)        # Plot heatmaps for each neuron pair
 
-        # Save parameters before fitting as a tab-delimited text file
-        params_before_fitting = kunert_parameters
 
-        with open(os.path.join(main_dir, "params_before_fitting.txt"), "w") as f:
+
+
+        # Scatter plot gamma_g and gamma_s as a function of the distance matrix
+        fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+
+        # Flatten the matrices for scatter plotting
+        distances = distance_matrix.flatten()
+        gamma_g_values = fitted_parameters["gamma_g"].flatten()
+        gamma_s_values = fitted_parameters["gamma_s"].flatten()
+
+        # Plot gamma_g vs distance
+        ax[0].scatter(distances, gamma_g_values, alpha=0.8, label="gamma_g")
+        ax[0].set_xlabel("Distance")
+        ax[0].set_ylabel("gamma_g")
+        ax[0].set_title("gamma_g vs Distance")
+        ax[0].grid(True)
+
+        # Plot gamma_s vs distance
+        ax[1].scatter(distances, gamma_s_values, alpha=0.8, label="gamma_s", color="orange")
+        ax[1].set_xlabel("Distance")
+        ax[1].set_ylabel("gamma_s")
+        ax[1].set_title("gamma_s vs Distance")
+        ax[1].grid(True)
+
+        # Adjust layout and save the figure
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_dir, "gamma_vs_distance_scatter.png"), bbox_inches="tight")
+        
+
+        # Save data
+
+        # Save parameters before fitting as a tab-delimited text file
+        params_before_fitting = model_parameters
+
+        with open(os.path.join(data_dir, "params_before_fitting.txt"), "w") as f:
             f.write("Parameter\tValue\n")
             for key, value in params_before_fitting.items():
                 f.write(f"{key}\t{value}\n")
 
-        with open(os.path.join(main_dir, "params_after_fitting.txt"), "w") as f:
+        # Save parameters after fitting as a tab-delimited text file
+        with open(os.path.join(data_dir, "fitted_parameters.txt"), "w") as f:
             f.write("Parameter\tValue\n")
-            for key, value in params_after_fitting.items():
+            for key, value in fitted_parameters.items():
                 f.write(f"{key}\t{value}\n")
 
-        # Save gamma_g, gamma_s, and Esyn as separate tab-delimited text files
-        np.savetxt(os.path.join(main_dir, "gamma_g.txt"), gamma_g, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "gamma_s.txt"), gamma_s, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "Esyn.txt"), Esyn, delimiter="\t", fmt="%.6f")
+        # Save parameters after fitting in a JSON format for easier loading
+        with open(os.path.join(data_dir, "fitted_parameters.pkl"), "wb") as f:
+            pickle.dump(fitted_parameters, f)
 
-        np.savetxt(os.path.join(main_dir, "gamma_g_after_fitting.txt"), params_after_fitting['gamma_g'], delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "gamma_s_after_fitting.txt"), params_after_fitting['gamma_s'], delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(main_dir, "E_s_after_fitting.txt"), params_after_fitting['E_s'], delimiter="\t", fmt="%.6f")
+        # Save gamma_g, gamma_s, and Esyn as separate tab-delimited text files
+        np.savetxt(os.path.join(data_dir, "gamma_g.txt"), gamma_g, delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(data_dir, "gamma_s.txt"), gamma_s, delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(data_dir, "Esyn.txt"), Esyn, delimiter="\t", fmt="%.6f")
+
+        np.savetxt(os.path.join(data_dir, "gamma_g_after_fitting.txt"), fitted_parameters['gamma_g'], delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(data_dir, "gamma_s_after_fitting.txt"), fitted_parameters['gamma_s'], delimiter="\t", fmt="%.6f")
+        np.savetxt(os.path.join(data_dir, "E_s_after_fitting.txt"), fitted_parameters['E_s'], delimiter="\t", fmt="%.6f")
 
 

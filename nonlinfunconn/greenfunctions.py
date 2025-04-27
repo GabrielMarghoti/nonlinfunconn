@@ -130,7 +130,7 @@ class GreenFunctions:
         """
         if linear_model:
             _g = np.copy(self.g0) if linear_model else np.copy(self.g)
-            
+
         elif trial_idx is not None:
             _g = np.copy(self.g[trial_idx])
             _G_k_j = _g[path[1], path[0], :, :]
@@ -161,12 +161,10 @@ class GreenFunctions:
         - np.ndarray: Effective Green's function matrix up to a maximum path length 'max_path_len'
         """
         # Initialize the effective Green's function with the first-order Green's function
-        _G = np.copy(self.g0) if use_equilibrium else np.copy(self.g)
-        _g = np.copy(self.g0) if use_equilibrium else np.copy(self.g)
         if node_pair == "all":
-            num_eff_nodes = G.shape[0]
 
             def compute_trial_update(g_trial):
+                num_eff_nodes = g_trial.shape[0]
                 G_trial = g_trial.copy()
                 for _ in range(2, max_paths_len + 1):
                     for i in range(num_eff_nodes):

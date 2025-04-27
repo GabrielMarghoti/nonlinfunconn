@@ -47,16 +47,6 @@ ds_list_path = (
 )
 ds_list_spont_path = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
 
-
-for arg in sys.argv:
-    _arg = arg.split(":")
-    if _arg[0] == "--matchless-nan-th": 
-        matchless_nan_th = float(_arg[1])
-    elif _arg[0] == "--folder:":
-        figures_folder = _arg[1]
-    if _arg[0] == "--aconn-ds-i": 
-        aconn_ds_i=int(_arg[1])
-
 signal_kwargs = {"remove_spikes": True,  "smooth": True, 
                  "smooth_mode": "sg_causal", 
                  "smooth_n": 13, "smooth_poly": 1,
@@ -259,10 +249,15 @@ kunert_parameters = {
     "a_d": ad,  
 }
 
+
+gamma_g_total = []
+
+gamma_s_total = []
+
+distances_total = []
+
 # Iterate over the folders whcih contains each experiment data
 for (i_folder, folder) in enumerate(ds_list):
-
-    #if '20220511_150909' in folder: continue # problem with this data, not sure if bug in the code or just bad dataset
 
     # Create functional connectome
     fconn = pp.Fconn.from_file(folder)
@@ -325,13 +320,16 @@ for (i_folder, folder) in enumerate(ds_list):
         time_fit_len = len(time_fit)
 
         #  Set output directories
-        fig_dir = figures_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/fit_negf"
-        data_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/fit_negf"
+        fig_dir = figures_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/paths_dyn_connectome"
+        data_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/paths_dyn_connectome"
         if kwar_fit_lineal_model:
             fig_dir += "_equilibirum"
             data_dir += "_equilibirum"
         fig_dir   += "/"
         data_dir  += "/"
+
+
+        cache_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/fit_negf/"
 
         ie_dir_list = []
 
@@ -387,7 +385,7 @@ for (i_folder, folder) in enumerate(ds_list):
         
         n_responding = len(responding)
 
-        if n_responding > 15 or n_responding < 4:
+        if n_responding > 20 or n_responding < 4:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
@@ -419,8 +417,8 @@ for (i_folder, folder) in enumerate(ds_list):
         print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
 
 
-        if np.mean(responses_correlations[0]) < 0.6:
-            print(f"Skipping dataset {folder} with low stimuli correlations.")
+        if np.mean(responses_correlations[0]) < 0.55:
+            print(f"Skipping dataset {folder} with low stimuli correlations for the target.")
             continue
         
         # Responding parameters positions
@@ -434,6 +432,15 @@ for (i_folder, folder) in enumerate(ds_list):
                 elif key.startswith(labels[i]):
                     responding_positions.append(anatlas_positions[key])
                     break
+                elif labels[i].startswith(key[:2]):
+                    responding_positions.append(anatlas_positions[key])
+                    break
+                elif key.startswith(labels[i][:2]):
+                    responding_positions.append(anatlas_positions[key])
+                    break
+        if len(responding_positions) != len(responding):
+            print(f"Warning: Mismatch in responding positions for dataset {folder}.")
+            continue
 
         responding_positions = np.array(responding_positions)
 
@@ -444,39 +451,15 @@ for (i_folder, folder) in enumerate(ds_list):
         os.makedirs(fig_dir, exist_ok=True)
         os.makedirs(data_dir, exist_ok=True)
 
-
-        # save connectome based network considering only responsive neurons over all stimulations
-        gamma_g = (Ggap*ggap)[responding][:, responding] 
-        gamma_s = (Gsyn*gsyn)[responding][:, responding]
-        Es = Esyn[responding][:, responding]
-
-        # Plot gamma_g and gamma_s as heatmaps
-        nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(fig_dir, 'gamma_g_gamma_s_heatmaps.png'))
-        # plot neural network
-        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], positions=responding_positions[:, :2], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only.png'))
-        
-        kunert_parameters.update({
-            "gamma_g": gamma_g,
-            "gamma_s": gamma_s,
-            "E_s": Es
-        })
-
-        model_parameters = kunert_parameters.copy()
-
-        if load_cache:
-            # Check if the cache file exists
-            cache_file_path = os.path.join(data_dir, "fitted_parameters.pkl")
-            if os.path.exists(cache_file_path):
-                # Load parameters after fitting from the .pkl file
-                with open(cache_file_path, "rb") as f:  # 'rb' not 'r'
-                    model_parameters = pickle.load(f)
-            else:
-                print(f"Warning: Cache file '{cache_file_path}' does not exist. Proceeding without loading cached parameters.")
-
-
-        Y_nonlin_fit = np.zeros_like(Y_smooth_total[:, responding, shift_vol:])
-
-        G_degree = 2
+       # Check if the cache file exists
+        cache_file_path = os.path.join(cache_dir, "fitted_parameters.pkl")
+        if os.path.exists(cache_file_path):
+            # Load parameters after fitting from the .pkl file
+            with open(cache_file_path, "rb") as f:  # 'rb' not 'r'
+                model_parameters = pickle.load(f)
+        else:
+            print(f"Warning: Cache file '{cache_file_path}' does not exist. Skipping.")
+            continue
 
         # initialize the greenfunctions class, computing the direct green functions of ecery tryal and every neuron pair interaction
         lif_gf = nlfc.GreenFunctions(
@@ -484,412 +467,54 @@ for (i_folder, folder) in enumerate(ds_list):
             x = Y_smooth_total[:, responding, shift_vol::],
             dt = fconn.Dt,
         )
+        g = lif_gf.g
+        g0 = lif_gf.g0
 
-        G  = lif_gf.total_G(G_degree)
+        # plot neural network after fitting
+        nlfc.utils.netplots.neural_network(model_parameters["gamma_g"], model_parameters["gamma_s"], model_parameters["E_s"], np.array(labels)[responding], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit.png'))
+        
+        K0= np.zeros_like(g0[:, :, 0, :])
+        DyCon0 = np.zeros_like(model_parameters["gamma_g"])
+        for i in range(n_responding):
+            for j in range(n_responding):
+                    K0[i, j] = np.sum(g0[i, j], axis=0) * fconn.Dt
+                    DyCon0[i, j] = np.sum(K0[i,j], axis=0) * fconn.Dt
 
+        K = np.zeros_like(g[:, :, :, 0, :])
         for ie_idx, ie in enumerate(stimulations_idx):
-             
+            DyCon = np.zeros_like(model_parameters["gamma_s"])
             os.makedirs(ie_dir_list[ie_idx], exist_ok=True)
             # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
             for i in range(n_responding):
                 for j in range(n_responding):
                     neu_i = responding[i]
-                    neu_j = responding[j]
-                    if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): continue
-                    nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-                    nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
+                    neu_j = responding[j]  
+                    K[ie_idx][i, j] = np.sum(g[ie_idx][i, j], axis=0) * fconn.Dt
+                    DyCon[i, j] = np.sum(K[ie_idx][i,j], axis=0) * fconn.Dt
+                            
+            nlfc.utils.netplots.neural_network(DyCon0, DyCon, DyCon, np.array(labels)[responding], save_path=os.path.join(ie_dir_list[ie_idx], f'Green_function_cumulative_sum_stim_{ie}.png'))
 
-
-
-#########################################################################################################################################################
-        
-        # FIT NEGF
-        
-        # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 20
-
-        print("NEGF fitting")
-        min_constrain_dict = {
-                        "C": 0.0,          
-                        "gamma": 0.0,  
-                        "beta": 0.0, 
-                        "a_r": 0.0,  
-                        "a_d": 0.0,  
-                        "gamma_g": 0.0,
-                        "gamma_s": 0.0,
-                        "E_s": -120,
-                        "E_c": -120,  
-                        }
-        max_constrain_dict = {
-                        "C": np.inf,          
-                        "gamma": np.inf,  
-                        "beta": np.inf, 
-                        "a_r": np.inf,  
-                        "a_d": np.inf,  
-                        "gamma_g": np.inf,
-                        "gamma_s": np.inf,
-                        "E_s": 20,
-                        "E_c": 100,  
-                        }
-
-        fitted_parameters = lif_gf.ADAM_fit(
-            x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
-            dt=lowering_resolution_step * fconn.Dt,
-            fit_linear_model=kwar_fit_lineal_model,
-            max_iters=100,
-            include_adj_matrix=True,
-            constrain=(min_constrain_dict, max_constrain_dict),
-            rms_tol=1e-4,
-            #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d'],
-            #loss_method='correlation'
-        )
-        # Compute green functions using the higher time resolution, but the fitted parameters
-        lif_gf = nlfc.GreenFunctions(
-            model = LIF(n_responding, fitted_parameters),
-            x = Y_smooth_total[:, responding, shift_vol::],
-            dt = fconn.Dt,
-        )
-        print('FIT DONE')
-
-#########################################################################################################################################################
-        
-        # plot neural network after fitting
-        nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], np.array(labels)[responding], positions=responding_positions[:, :2], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit.png'))
-    
-        ####
-        # Plot
-        ####
-        nrows = max(1,int(np.sqrt(num_neurons)))
-        ncols = int(np.sqrt(num_neurons))+2
-        if plot:
-            print("plotting")
-            try:
-                fig.clear()
-            except:
-                pass
-            fig, ax = plt.subplots(nrows=nrows, ncols=ncols,figsize=(15,10))
-            for a in np.ravel(ax): a.set_xticks([]);a.set_yticks([])
-            if nrows==1: ax = np.array([ax])
-
-        # plot signals for visualization
-        for ie_idx in range(num_stimulations):
-            os.makedirs(ie_dir_list[ie_idx], exist_ok=True)
-             
-            ie = stimulations_idx[ie_idx]
-
-            fig, ax = plt.subplots(figsize=(10, 6))  # Create figure and axis
-            fig_smooth, ax_smooth = plt.subplots(figsize=(10, 6))  # Create smoothed figure and axis
-
-            for neu_j in range(fconn.n_neurons):  # Iterate over all neurons
-
-                # Assign colors based on neuron type
-                if neu_j == stim:
-                    color, lw = "red", 3  # Stimulated neuron
-                elif neu_j in responding:
-                    color, lw = "blue", 2  # Responsive neurons
-                else:
-                    color, lw = "gray", 0.5  # Non-responsive neurons
-
-                ax.plot(time_plt, Y_total[ie_idx, neu_j], color=color, linewidth=lw, alpha=0.6)
-                ax_smooth.plot(time_plt, Y_smooth_total[ie_idx, neu_j], color=color, linewidth=lw, alpha=0.6)  # Corrected to use smoothed data
-            for i in range(n_responding):
+                
+        for i in range(n_responding):
+            for j in range(n_responding):
                 neu_i = responding[i]
-                neu_j = stim
-                if np.all(Y_nonlin_fit[ie_idx, :, i] == 0.0) : continue
-                #ax.plot(time_fit, Y_nonlin_fit[ie_idx, :, i], color=color, linewidth=lw, alpha=0.8, ls='--')  # using conectome estimated propagated signals
-                ax_smooth.plot(time_fit, Y_nonlin_fit[ie_idx, i], color="blue", linewidth=2, alpha=0.9, ls='--')
-        
-            # Create custom legend handles
-            stim_handle = mlines.Line2D([], [], color="red", linewidth=2.5, label="Stimulated")
-            responsive_handle = mlines.Line2D([], [], color="blue", linewidth=2, label="Responsive")
-            non_responsive_handle = mlines.Line2D([], [], color="gray", linewidth=1, label="Non-responsive")
+                neu_j = responding[j]  
 
-            # Add legends to both plots
-            ax.legend(handles=[stim_handle, responsive_handle, non_responsive_handle], loc="upper right")
-            ax_smooth.legend(handles=[stim_handle, responsive_handle, non_responsive_handle], loc="upper right")
-
-            # Set plot labels & titles
-            ax.set_xlabel("Time (s)")
-            ax.set_ylabel("Delta F/F")
-            ax.set_title(f"Neuron Responses to Stimulation {ie}")
-
-            ax_smooth.set_xlabel("Time (s)")
-            ax_smooth.set_ylabel("Delta F/F")
-            ax_smooth.set_title(f"Neuron Responses to Stimulation {ie} (Smoothed)")
-
-            # Mark key time points with vertical lines
-            ax.axvline(0, color="k", alpha=0.5, linestyle="--")  # Stimulation onset
-            #ax.axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, color="k", alpha=0.5, linestyle="--")
-
-            ax_smooth.axvline(0, color="k", alpha=0.5, linestyle="--")  # Stimulation onset
-            #ax_smooth.axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, color="k", alpha=0.5, linestyle="--")
-
-            # Set y-limits (before tight_layout)
-            ax.set_ylim(-31, 31)
-            ax_smooth.set_ylim(-61, 61)
-
-            # Final plot adjustments
-            fig.tight_layout()
-            fig_smooth.tight_layout()
-
-            # Save figures with correct filenames
-            fig.savefig(f"{ie_dir_list[ie_idx]}signals.png", bbox_inches="tight")
-            fig_smooth.savefig(f"{ie_dir_list[ie_idx]}signals_smooth.png", bbox_inches="tight")  # Fixed filename
-
-            # Close figures properly
-            plt.close(fig)
-            plt.close(fig_smooth)
-
-        #G = lif_gf.total_G(G_degree) 
-        #G0 = lif_gf.total_G(G_degree, linear_model=True)
-
-        G  = lif_gf.total_G(G_degree)
-
-        for ie_idx, ie in enumerate(stimulations_idx):
-
-            # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
-             for i in range(n_responding):
-                neu_i = responding[i]
-                Y_nonlin_fit[ie_idx][i, :] = np.full_like(Y_nonlin_fit[ie_idx][i, :], Y_smooth_total[ie_idx][neu_i, shift_vol])
-                for j in range(n_responding):
-                    neu_j = responding[j]
-                    delta_j = Y_smooth_total[ie_idx][neu_j, shift_vol:] - Y_smooth_total[ie_idx][neu_j, shift_vol]
-                    Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=fconn.Dt)
-                
-                    if i == 0 or (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-04)): 
-                        continue
-                    #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-                    nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-                    #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
-                    nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-
-        ###############
-        # PREPARE PANELS PLOT
-        ###############
-
-        color_map = cm.get_cmap("tab10", num_stimulations)  # Use tab10 or any other colormap
-
-        nrows = max(1, int(np.sqrt(n_responding)))
-        ncols = int(np.sqrt(n_responding)) + 2
-        try:
-            fig.clear()
-        except:
-            pass
-        fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(16, 12)) 
-        fig2, ax2 = plt.subplots(nrows=1, ncols=2, figsize=(12, 6)) 
-        for a in np.ravel(ax): 
-            # a.set_xticks([])
-            # a.set_yticks([])
-            a.twinx().set_yticks([])
-            a.set_xlabel('time (s)')
-        for a in np.ravel(ax2): 
-            # a.set_xticks([])
-            # a.set_yticks([])
-            a.twinx().set_yticks([])
-        if nrows == 1: 
-            ax = np.array([ax])
-            a.set_xlabel('time (s)')
-
-        ax[0, 0].set_ylabel('Signal (a.u)')
-
-        ax2[0].set_ylabel('Signal (a.u)')
-
-        for i, neu_i in enumerate(responding):
-
-            # Plot only for detected responses
-            i_plot = np.where(responding==neu_i)[0][0]
-            ax_r = i_plot//ncols
-            ax_c = i_plot%ncols
-
-            panel_title = f"Neuron {neu_i}: {labels[neu_i]}"
-
-            k = []
-        
-            for ie_idx, ie in enumerate(stimulations_idx):
-                stim_color = color_map(ie_idx)  # Get a distinct color for each ie plot line
-
-                y_plt = Y_total[ie_idx, neu_i]
-                y = Y_total[ie_idx, neu_i][shift_vol:]
-                y_smooth_plt = Y_smooth_total[ie_idx, neu_i]
-                y_smooth = Y_smooth_total[ie_idx, neu_i][shift_vol:]
-
-                # Get the unconstrained parameters to build a cleaned-up version of the stimulated neuron's activity (FOR LIN KERNEL)
-                stim_unc_par_dict = fconn.fit_params_unc[ie][stim]
-                stim_unc_par = fconn.get_irrarray_from_params(stim_unc_par_dict)
-                
-                stim_y = pp.Fconn.eci(time_fit, stim_unc_par)  # stim_y is an exponential kernel
+                plt.figure(figsize=(6, 4), dpi=200)
+                plt.plot(time_fit[-1] - time_fit[:], K0[i, j], label="K₀", color="black", linewidth=2.4)
+                for ie_idx, ie in enumerate(stimulations_idx):
     
-                fconn.clear_fit_results(stim=ie,neu=neu_i,mode="constrained")
+                    color = np.random.rand(3).tolist() 
+                    plt.plot(time_fit[-1] - time_fit[:], K[ie_idx][i, j], label=f"Stimulation {ie}", color=color, linewidth=2)
+                    plt.xlabel("T - t′ (s)") 
+                    plt.ylabel("K(t')")
+                    plt.legend()
+                    plt.title("Cumulative Green function amplitude")
+
+                plt.savefig(os.path.join(fig_dir,f'Cumulative_K_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'), bbox_inches='tight')
+                plt.close()
+    
                 
-                params_, n_branch_params, _ = fconn.fit_eci_branching(
-                                time_fit,y_smooth,stim_y,dt=fconn.Dt,
-                                n_hops_min=2,n_hops_max=3,
-                                n_branches_max=2,#3,
-                                rms_limits=[None,None],auto_stop=True,rms_tol=1e-2,
-                                method="trf",routine="least_squares")
-                
-                if params_ is None: 
-                    params_dict = {"params": [0,1], 
-                            "n_branches": 1, 
-                            "n_branch_params": [2]}
-                    fconn.fit_params[ie][neu_i] = params_dict
-                    continue
-                
-                params_dict = {"params": np.array(params_), 
-                            "n_branches": len(n_branch_params), 
-                            "n_branch_params": n_branch_params}
-                fconn.fit_params[ie][neu_i] = params_dict
-                
-
-                params = fconn.get_irrarray_from_params(params_dict)
-                
-                k_trial = pp.Fconn.eci(time_fit,params)
-                k.append(k_trial)
-
-                fit_y_trial =  pp.convolution(stim_y, k_trial, fconn.Dt,8)
-
-                #lbl = str(neu_i)
-                lbl = f'Response to stim. #{ie}'
-                fit_lbl = "Trial kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
-                lw = 1
-                if neu_i == stim: 
-                    lbl += "*"
-                    lw = 2
-                    ax2[0].set_title(panel_title, fontsize=10)
-                    ax2[0].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-                    #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
-                    ax2[0].set_xlim(time_plt[0], time_plt[-1])
-                    ax2[0].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
-                    ax2[0].axvline(0, c="k", alpha=0.5)
-                    #ax2[0].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
-
-                elif neu_i == most_variable_neuron:
-                    ax2[1].set_title(panel_title, fontsize=10)
-                    ax2[1].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-                    #ax2[1].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
-                    #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
-                    ax2[1].set_xlim(time_plt[0], time_plt[-1])
-                    ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
-                    ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx,i], label="NEGF pred.", lw=2, ls='--', c=stim_color)
-                    ax2[1].axvline(0, c="k", alpha=0.5)
-
-                ax[ax_r, ax_c].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
-                #ax[ax_r, ax_c].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
-
-                #rf_plt = rf
-                #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
-                stim_y_plt = stim_y / np.sum(stim_y) * np.abs(np.sum(y))
-                if neu_i != stim:
-                    ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, i], label="NEGF pred.", lw=2, ls=':', c=stim_color)
-                    
-                # ax[ax_r, ax_c].plot(x, rf_plt, label="rf", lw=2, c="k")
-                # ax[ax_r, ax_c].plot(x, stim_y_plt, label=f"st stimulation {ie}", lw=2, c=stim_color, alpha=0.6)
-
-                #params = fconn.get_irrarray_from_params(params_dict)
-                #rf = pp.Fconn.eci(x, params)
-                #fit_y = km[neu_i, stim,  :] # pp.convolution(stim_y, rf, fconn.Dt, 8)
-                #fit_ls = ":"
-                #fit_lbl = "Av. kernel fit" #"|".join([str(nbp - 1) for nbp in n_branch_params])
-                #ax[ax_r, ax_c].plot(np.linspace(0,60,120), fit_y, label=fit_lbl, c=stim_color, lw=1, ls=fit_ls)
-
-                
-            # Find the minimum length of arrays in k
-            min_len = min(len(item) for item in k)
-
-            # Trim each array to min_len using list comprehension
-            k_trimmed = [item[:min_len] for item in k]
-
-            # Compute the average
-            lin_kernel = np.average(np.array(k_trimmed), axis=0)
-
-            fit_y =  pp.convolution(stim_y, lin_kernel, fconn.Dt,8)
-            fit_ls = "-"
-            fit_lbl = "Linear kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
-            if neu_i == stim:
-                panel_title = "Stimulated "+ panel_title
-                #ax2[0].plot(time_fit, stim_y, label="Filtered Stim.", c='yellow', lw=1)
-                ax2[0].legend()
-            elif neu_i == most_variable_neuron:
-                ax2[1].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
-                ax2[1].legend()
-            if neu_i != stim: 
-                ax[ax_r, ax_c].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
-
-            ax[ax_r, ax_c].set_xlim(time_plt[0], time_plt[-1])
-            ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
-            ax[ax_r, ax_c].axvline(0, c="k", alpha=0.8)
-
-            ax[ax_r, ax_c].set_title(panel_title, fontsize=10)
-            if i_plot == len(responding) - 1:  # Add legend only for the last panel
-                handles, labels_plt = ax[ax_r, ax_c].get_legend_handles_labels()
-                fig.legend(handles, labels_plt, loc='upper center', bbox_to_anchor=(0.5, 0.95), ncol=3)
-
-
-        # Save plot with neuron index in filename
-        filename = f"panels_mult_stimulation_fits.png"
-        filename2 = f"most_variable_neuron_response.png"
-        fig.savefig(os.path.join(fig_dir, filename), bbox_inches="tight")
-        plt.close(fig)        # Plot heatmaps for each neuron pair
-        fig2.savefig(os.path.join(fig_dir, filename2), bbox_inches="tight")
-        plt.close(fig2)        # Plot heatmaps for each neuron pair
-
-
-
-
-        # Scatter plot gamma_g and gamma_s as a function of the distance matrix
-        fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-
-        # Flatten the matrices for scatter plotting
-        distances = distance_matrix.flatten()
-        gamma_g_values = fitted_parameters["gamma_g"].flatten()
-        gamma_s_values = fitted_parameters["gamma_s"].flatten()
-
-        # Plot gamma_g vs distance
-        ax[0].scatter(distances, gamma_g_values, alpha=0.8, label="gamma_g")
-        ax[0].set_xlabel("Distance")
-        ax[0].set_ylabel("gamma_g")
-        ax[0].set_title("gamma_g vs Distance")
-        ax[0].grid(True)
-
-        # Plot gamma_s vs distance
-        ax[1].scatter(distances, gamma_s_values, alpha=0.8, label="gamma_s", color="orange")
-        ax[1].set_xlabel("Distance")
-        ax[1].set_ylabel("gamma_s")
-        ax[1].set_title("gamma_s vs Distance")
-        ax[1].grid(True)
-
-        # Adjust layout and save the figure
-        plt.tight_layout()
-        plt.savefig(os.path.join(fig_dir, "gamma_vs_distance_scatter.png"), bbox_inches="tight")
         
-
-        # Save data
-
-        # Save parameters before fitting as a tab-delimited text file
-        params_before_fitting = model_parameters
-
-        with open(os.path.join(data_dir, "params_before_fitting.txt"), "w") as f:
-            f.write("Parameter\tValue\n")
-            for key, value in params_before_fitting.items():
-                f.write(f"{key}\t{value}\n")
-
-        # Save parameters after fitting as a tab-delimited text file
-        with open(os.path.join(data_dir, "fitted_parameters.txt"), "w") as f:
-            f.write("Parameter\tValue\n")
-            for key, value in fitted_parameters.items():
-                f.write(f"{key}\t{value}\n")
-
-        # Save parameters after fitting in a JSON format for easier loading
-        with open(os.path.join(data_dir, "fitted_parameters.pkl"), "wb") as f:
-            pickle.dump(fitted_parameters, f)
-
-        # Save gamma_g, gamma_s, and Esyn as separate tab-delimited text files
-        np.savetxt(os.path.join(data_dir, "gamma_g.txt"), gamma_g, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(data_dir, "gamma_s.txt"), gamma_s, delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(data_dir, "Esyn.txt"), Esyn, delimiter="\t", fmt="%.6f")
-
-        np.savetxt(os.path.join(data_dir, "gamma_g_after_fitting.txt"), fitted_parameters['gamma_g'], delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(data_dir, "gamma_s_after_fitting.txt"), fitted_parameters['gamma_s'], delimiter="\t", fmt="%.6f")
-        np.savetxt(os.path.join(data_dir, "E_s_after_fitting.txt"), fitted_parameters['E_s'], delimiter="\t", fmt="%.6f")
-
-
+    
+   

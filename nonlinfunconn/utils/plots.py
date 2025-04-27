@@ -117,3 +117,4 @@ def t_t_heatmap(time, G, save_path= None):
     else:
         plt.savefig(save_path, bbox_inches='tight')
     plt.close()
+

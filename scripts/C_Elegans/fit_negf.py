@@ -467,7 +467,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # Plot gamma_g and gamma_s as heatmaps
         nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(fig_dir, 'gamma_g_gamma_s_heatmaps.png'))
         # plot neural network
-        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], positions=responding_positions[:, :2], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only.png'))
+        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_original_parameters.png'))
         
         kunert_parameters.update({
             "gamma_g": gamma_g,
@@ -919,7 +919,7 @@ for (i_folder, folder) in enumerate(ds_list):
 fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
 # Flatten the matrices for scatter plotting
-D = 100 # mm²/s
+D = 10 # mm²/s
 distances = distances_total
 distances_squared = [d**2 for d in distances]
 distances_exp_squared = [np.exp(-d**2)/(4*D) for d in distances]

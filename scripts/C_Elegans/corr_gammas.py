@@ -1,10 +1,5 @@
 #
-# code for fit of convolution kernels, combination of linear (exponentials) or non-linear (NEGF) kernels
-#
-# inspired by 
-# https://github.com/leiferlab/pumpprobe/tree/main/scripts/fconnectivity/fit_responses_constrained_stim_eci
-# https://github.com/leiferlab/pumpprobe/tree/main/scripts/fconnectivity/figures/compare_connectomes/funatlas_vs_correlations2
-# Kunert et al., PRE 89 052805 (2014) for parameter estimation
+# code for correlation between fitted adjacency matrix and the annatomical connectome of C. Elegans worm wild (wt) type and mutant (unc31)with no wireless connection receptors
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -40,11 +35,8 @@ aconn_ds_i = None # default is loading from funatlas, if aconn_ds_i is set, it w
 figures_folder = "figures/C_elegans_pumpprobre_exp/"
 data_folder = "data/C_elegans_pumpprobre_exp/"
 
-ds_list_path = (
-    "/home/gabrielm/paper_reproduction/ds_list_unc31.txt" if "--unc31" in sys.argv 
-    else "/home/gabrielm/paper_reproduction/ds_list_wt.txt" if "--wt" in sys.argv 
-    else "/home/gabrielm/paper_reproduction/ds_list_full.txt"
-)
+ds_list_path =  "/home/gabrielm/paper_reproduction/ds_list_full.txt"
+
 ds_list_spont_path = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
 
 signal_kwargs = {"remove_spikes": True,  "smooth": True, 
@@ -250,9 +242,17 @@ kunert_parameters = {
 }
 
 
-gamma_g_total = []
+gamma_g_connectome_wt = []
+gamma_g_connectome_unc31 = []
 
-gamma_s_total = []
+gamma_s_connectome_wt = []
+gamma_s_connectome_unc31 = []
+
+gamma_g_fitted_wt = []
+gamma_g_fitted_unc31 = []
+
+gamma_s_fitted_wt = []
+gamma_s_fitted_unc31 = []
 
 distances_total = []
 
@@ -460,61 +460,65 @@ for (i_folder, folder) in enumerate(ds_list):
         else:
             print(f"Warning: Cache file '{cache_file_path}' does not exist. Skipping.")
             continue
+        # save connectome based network considering only responsive neurons over all stimulations
+        gamma_g = (Ggap*ggap)[responding][:, responding] 
+        gamma_s = (Gsyn*gsyn)[responding][:, responding]
+        Es = Esyn[responding][:, responding]
 
-        # initialize the greenfunctions class, computing the direct green functions of ecery tryal and every neuron pair interaction
-        lif_gf = nlfc.GreenFunctions(
-            model = LIF(n_responding, model_parameters),
-            x = Y_smooth_total[:, responding, shift_vol::],
-            dt = fconn.Dt,
-        )
-        g = lif_gf.g
-        g0 = lif_gf.g0
-
-        # plot neural network after fitting
-        nlfc.utils.netplots.neural_network(model_parameters["gamma_g"], model_parameters["gamma_s"], model_parameters["E_s"], np.array(labels)[responding], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit.png'))
+        kunert_parameters.update({
+            "gamma_g": gamma_g,
+            "gamma_s": gamma_s,
+            "E_s": Es
+        })
+        print('ds_tags: ', ds_tags[i_folder])
+        if "wt" in ds_tags[i_folder]:
+            gamma_g_connectome_wt.extend(gamma_g.flatten())
+            gamma_s_connectome_wt.extend(gamma_s.flatten())
+            gamma_g_fitted_wt.extend(model_parameters["gamma_g"].flatten())
+            gamma_s_fitted_wt.extend(model_parameters["gamma_s"].flatten())
+        elif "unc31" in ds_tags[i_folder]:
+            gamma_g_connectome_unc31.extend(gamma_g.flatten())
+            gamma_s_connectome_unc31.extend(gamma_s.flatten())
+            gamma_g_fitted_unc31.extend(model_parameters["gamma_g"].flatten())
+            gamma_s_fitted_unc31.extend(model_parameters["gamma_s"].flatten())
+       
         
-        K0= np.zeros_like(g0[:, :, 0, :])
-        DyCon0 = np.zeros_like(model_parameters["gamma_g"])
-        for i in range(n_responding):
-            for j in range(n_responding):
-                    K0[i, j] = np.sum(g0[i, j], axis=0) * fconn.Dt
-                    DyCon0[i, j] = np.sum(K0[i,j], axis=0) * fconn.Dt
+# Scatter plot gamma_g and gamma_s: connectome vs fitted
+fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
-        K = np.zeros_like(g[:, :, :, 0, :])
-        for ie_idx, ie in enumerate(stimulations_idx):
-            DyCon = np.zeros_like(model_parameters["gamma_s"])
-            os.makedirs(ie_dir_list[ie_idx], exist_ok=True)
-            # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
-            for i in range(n_responding):
-                for j in range(n_responding):
-                    neu_i = responding[i]
-                    neu_j = responding[j]  
-                    K[ie_idx][i, j] = np.sum(g[ie_idx][i, j], axis=0) * fconn.Dt
-                    DyCon[i, j] = np.sum(K[ie_idx][i,j], axis=0) * fconn.Dt
-                            
-            nlfc.utils.netplots.neural_network(np.zeros_like(DyCon0), DyCon, DyCon, np.array(labels)[responding], save_path=os.path.join(ie_dir_list[ie_idx], f'Green_function_cumulative_sum_stim_{ie}.png'))
+ax[0].scatter(gamma_g_connectome_wt, gamma_g_fitted_wt, alpha=0.8, color="blue", label="WT")
+ax[0].scatter(gamma_g_connectome_unc31, gamma_g_fitted_unc31, alpha=0.8, color="orange", label="unc31")
+ax[0].set_xlabel("gamma_g (connectome)")
+ax[0].set_ylabel("gamma_g (fitted)")
+ax[0].set_title("gamma_g: Connectome vs Fitted")
+ax[0].grid(True)
+ax[0].legend(loc="upper left")
 
-                
-        for i in range(n_responding):
-            for j in range(n_responding):
-                neu_i = responding[i]
-                neu_j = responding[j]  
+ax[1].scatter(gamma_s_connectome_wt, gamma_s_fitted_wt, alpha=0.8, color="blue", label="WT")
+ax[1].scatter(gamma_s_connectome_unc31, gamma_s_fitted_unc31, alpha=0.8, color="orange", label="unc31")
+ax[1].set_xlabel("gamma_s (connectome)")
+ax[1].set_ylabel("gamma_s (fitted)")
+ax[1].set_title("gamma_s: Connectome vs Fitted")
+ax[1].grid(True)
+ax[1].legend(loc="upper left")
 
-                plt.figure(figsize=(6, 4), dpi=200)
-                plt.plot(time_fit[-1] - time_fit[:], K0[i, j], label="K₀", color="black", linewidth=2.4)
-                for ie_idx, ie in enumerate(stimulations_idx):
-    
-                    color = np.random.rand(3).tolist() 
-                    plt.plot(time_fit[-1] - time_fit[:], K[ie_idx][i, j], label=f"Stimulation {ie}", color=color, linewidth=2)
-                    plt.xlabel("T - t′ (s)") 
-                    plt.ylabel("K(t')")
-                    plt.legend()
-                    plt.title("Cumulative Green function amplitude")
+plt.savefig(os.path.join(figures_folder, "gammas_connectome_vs_fitted_scatter_plot.png"), bbox_inches="tight")
+plt.close(fig)
 
-                plt.savefig(os.path.join(fig_dir,f'Cumulative_K_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'), bbox_inches='tight')
-                plt.close()
-    
-                
-        
-    
-   
+# Bar plot with the correlation of the data
+gamma_g_corr_wt = np.corrcoef(gamma_g_connectome_wt, gamma_g_fitted_wt)[0, 1]
+gamma_g_corr_unc31 = np.corrcoef(gamma_g_connectome_unc31, gamma_g_fitted_unc31)[0, 1]
+gamma_s_corr_wt = np.corrcoef(gamma_s_connectome_wt, gamma_s_fitted_wt)[0, 1]
+gamma_s_corr_unc31 = np.corrcoef(gamma_s_connectome_unc31, gamma_s_fitted_unc31)[0, 1]
+
+labels = ["gamma_g (WT)", "gamma_g (unc31)", "gamma_s (WT)", "gamma_s (unc31)"]
+correlations = [gamma_g_corr_wt, gamma_g_corr_unc31, gamma_s_corr_wt, gamma_s_corr_unc31]
+
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.bar(labels, correlations, color=["blue", "orange", "blue", "orange"], alpha=0.8)
+ax.set_ylabel("Correlation Coefficient")
+ax.set_title("Correlation of Connectome vs Fitted Gammas")
+ax.grid(axis="y")
+
+plt.savefig(os.path.join(figures_folder, "gammas_connectome_vs_fitted_correlation_bar_plot.png"), bbox_inches="tight")
+plt.close(fig)

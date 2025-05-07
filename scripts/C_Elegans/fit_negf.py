@@ -308,7 +308,7 @@ for (i_folder, folder) in enumerate(ds_list):
         num_stimulations = len(stimulations_idx)
 
         # Skip datasets where the number of stimulations is not between 2 and 3
-        if not (3 <= num_stimulations <= 4): 
+        if not (2 <= num_stimulations <= 4): 
             continue
 
         stim_neuron_label = labels[stim]
@@ -398,13 +398,13 @@ for (i_folder, folder) in enumerate(ds_list):
 
         n_responding_labeled = len(np.array(responding)[labeled_neurons])
 
-        if n_responding > 14 or n_responding_labeled < 5:
+        if n_responding > 12 or n_responding_labeled < 4:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
-        if any(label == '' for label in np.array(labels)[responding]):
-            print(f"Skipping dataset {folder} with some responding neuron not identified.")
-            continue
+        #if any(label == '' for label in np.array(labels)[responding]):
+        #    print(f"Skipping dataset {folder} with some responding neuron not identified.")
+        #    continue
 
         # plot complete neural network 
         #nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(fig_dir, f'Neural_Network_total.png'))
@@ -477,6 +477,9 @@ for (i_folder, folder) in enumerate(ds_list):
         # plot neural network
         nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, responding_labels, save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_original_parameters.png'))
         
+        # nodes at real positions
+        #nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, responding_labels, positions=responding_positions[:, [0,1]], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_before_fit_real_positions.png'))
+    
         kunert_parameters.update({
             "gamma_g": gamma_g,
             "gamma_s":  gamma_s,
@@ -508,7 +511,7 @@ for (i_folder, folder) in enumerate(ds_list):
         )
 
         G  = lif_gf.total_G(G_degree)
-        '''
+        
         for ie_idx, ie in enumerate(stimulations_idx):
              
             os.makedirs(ie_dir_list[ie_idx], exist_ok=True)
@@ -520,7 +523,7 @@ for (i_folder, folder) in enumerate(ds_list):
                     if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): continue
                     nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
                     nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-        '''
+
 
 
         #########################################################################################################################################################
@@ -528,7 +531,9 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 20
+
+        lowering_resolution_step = 2
+        fitting_window = 60
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -555,13 +560,14 @@ for (i_folder, folder) in enumerate(ds_list):
                         }
 
         fitted_parameters = lif_gf.ADAM_fit(
-            x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
+            x=Y_smooth_total[:, responding, shift_vol:shift_vol+fitting_window:lowering_resolution_step],
             dt=lowering_resolution_step * fconn.Dt,
             fit_linear_model=kwar_fit_lineal_model,
-            max_iters=30,
-            #constrain=(min_constrain_dict, max_constrain_dict),
-            rms_tol=1e-5,
-            #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d'],
+            target_nodes=np.arange(1, n_responding),  # Exclude index 0 (stimulated neuron)
+            max_iters=200,
+            constrain=(min_constrain_dict, max_constrain_dict),
+            rms_tol=1e-2,
+            parameter_to_fit_list=['C', 'gamma', 'E_c', 'gamma_g', 'gamma_s', 'E_s'],
             #loss_method='correlation'
         )
         # Compute green functions using the higher time resolution, but the fitted parameters
@@ -576,19 +582,26 @@ for (i_folder, folder) in enumerate(ds_list):
         
         # plot neural network after fitting
         nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_labels, save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit.png'))
+       
+        # nodes at real positions
+        #nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_labels, positions=responding_positions[:, [0,1]], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit_real_positions.png'))
     
         ######
         # Plot
-        ######
-        nrows = max(1,int(np.sqrt(num_neurons)))
-        ncols = int(np.sqrt(num_neurons))+2
+        ######        
+        nrows = int(np.ceil(np.sqrt(num_neurons)))
+        ncols = int(np.ceil(num_neurons / nrows))
+        while nrows * ncols < num_neurons:
+            ncols += 1
+            nrows = int(np.ceil(num_neurons / ncols))
+    
         if plot:
             print("plotting")
             try:
                 fig.clear()
             except:
                 pass
-            fig, ax = plt.subplots(nrows=nrows, ncols=ncols,figsize=(15,10))
+            fig, ax = plt.subplots(nrows=nrows, ncols=ncols,figsize=(16,12))
             for a in np.ravel(ax): a.set_xticks([]);a.set_yticks([])
             if nrows==1: ax = np.array([ax])
 
@@ -676,33 +689,42 @@ for (i_folder, folder) in enumerate(ds_list):
                     neu_j = responding[j]
                     delta_j = Y_smooth_total[ie_idx][neu_j, shift_vol:] - Y_smooth_total[ie_idx][neu_j, shift_vol]
                     Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=fconn.Dt)
-                    '''
+                    
                     if i == 0 or (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-04)): 
                         continue
                     #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
                     nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
                     #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
                     nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-                    '''
+                     
         ###############
         # PREPARE PANELS PLOT
         ###############
 
         color_map = cm.get_cmap("tab10", num_stimulations)  # Use tab10 or any other colormap
-
-        nrows = max(1, int(np.sqrt(n_responding)))
-        ncols = int(np.sqrt(n_responding)) + 2
+        nrows = int(np.ceil(np.sqrt(len(responding))))
+        ncols = int(np.ceil(len(responding) / nrows))
+        while nrows * ncols < len(responding):
+            ncols += 1
+            nrows = int(np.ceil(len(responding) / ncols))
+    
         try:
             fig.clear()
         except:
             pass
         fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(16, 12)) 
-        fig2, ax2 = plt.subplots(nrows=1, ncols=2, figsize=(12, 6)) 
+        fig2, ax2 = plt.subplots(nrows=1, ncols=2, figsize=(16, 6)) 
         for a in np.ravel(ax): 
             # a.set_xticks([])
             # a.set_yticks([])
             a.twinx().set_yticks([])
-            a.set_xlabel('time (s)')
+            
+        for i in range(nrows):
+            for j in range(ncols):
+                if i == nrows - 1:  # Set xlabel only for the last row
+                    ax[i, j].set_xlabel('time (s)')
+                if j == 0:  # Set ylabel only for the first column
+                    ax[i, j].set_ylabel('Signal (a.u)')
         for a in np.ravel(ax2): 
             # a.set_xticks([])
             # a.set_yticks([])
@@ -711,7 +733,6 @@ for (i_folder, folder) in enumerate(ds_list):
             ax = np.array([ax])
             a.set_xlabel('time (s)')
 
-        ax[0, 0].set_ylabel('Signal (a.u)')
 
         ax2[0].set_ylabel('Signal (a.u)')
 
@@ -776,12 +797,13 @@ for (i_folder, folder) in enumerate(ds_list):
                 if neu_i == stim: 
                     lbl += "*"
                     lw = 2
-                    ax2[0].set_title(panel_title, fontsize=10)
+                    ax2[0].set_title("Stimulated "+ panel_title, fontsize=10)
                     ax2[0].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
                     #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                     ax2[0].set_xlim(time_plt[0], time_plt[-1])
                     ax2[0].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
-                    ax2[0].axvline(0, c="k", alpha=0.5)
+                    ax2[0].axvline(0, c="k", alpha=0.5, label="stim. time")
+                    ax2[0].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Training")
                     #ax2[0].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
 
                 elif neu_i == most_variable_neuron:
@@ -791,8 +813,9 @@ for (i_folder, folder) in enumerate(ds_list):
                     #ax2[0].plot(time, y_plt, c=stim_color, lw=lw, alpha=0.2)
                     ax2[1].set_xlim(time_plt[0], time_plt[-1])
                     ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
-                    ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx,i], label="NEGF pred.", lw=2, ls='--', c=stim_color)
-                    ax2[1].axvline(0, c="k", alpha=0.5)
+                    ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx,i], label="Nonlinear kernel pred.", lw=2, ls='--', c=stim_color)
+                    ax2[1].axvline(0, c="k", alpha=0.5, label="stim. time")
+                    ax2[1].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Training")
 
                 ax[ax_r, ax_c].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
                 #ax[ax_r, ax_c].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
@@ -801,7 +824,7 @@ for (i_folder, folder) in enumerate(ds_list):
                 #rf_plt /= np.max(np.abs(rf_plt)) / np.max(np.abs(fit_y))
                 stim_y_plt = stim_y / np.sum(stim_y) * np.abs(np.sum(y))
                 if neu_i != stim:
-                    ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, i], label="NEGF pred.", lw=2, ls=':', c=stim_color)
+                    ax[ax_r, ax_c].plot(time_fit, Y_nonlin_fit[ie_idx, i], label="Nonlinear kernel pred.", lw=2, ls=':', c=stim_color)
                     
                 # ax[ax_r, ax_c].plot(x, rf_plt, label="rf", lw=2, c="k")
                 # ax[ax_r, ax_c].plot(x, stim_y_plt, label=f"st stimulation {ie}", lw=2, c=stim_color, alpha=0.6)
@@ -825,25 +848,27 @@ for (i_folder, folder) in enumerate(ds_list):
 
             fit_y =  pp.convolution(stim_y, lin_kernel, fconn.Dt,8)
             fit_ls = "-"
-            fit_lbl = "Linear kernel prediction" #"|".join([str(nbp - 1) for nbp in n_branch_params])
+            fit_lbl = "Linear kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
             if neu_i == stim:
                 panel_title = "Stimulated "+ panel_title
                 #ax2[0].plot(time_fit, stim_y, label="Filtered Stim.", c='yellow', lw=1)
-                ax2[0].legend()
+                #ax2[0].legend()
             elif neu_i == most_variable_neuron:
                 ax2[1].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
-                ax2[1].legend()
+                ax2[1].legend(loc='upper left', bbox_to_anchor=(0, 1))
             if neu_i != stim: 
                 ax[ax_r, ax_c].plot(time_fit, fit_y, label=fit_lbl, c='black', lw=1, ls=fit_ls)
 
             ax[ax_r, ax_c].set_xlim(time_plt[0], time_plt[-1])
             ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
             ax[ax_r, ax_c].axvline(0, c="k", alpha=0.8)
+            ax[ax_r, ax_c].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Training")
+            
 
             ax[ax_r, ax_c].set_title(panel_title, fontsize=10)
             if i_plot == len(responding) - 1:  # Add legend only for the last panel
                 handles, labels_plt = ax[ax_r, ax_c].get_legend_handles_labels()
-                fig.legend(handles, labels_plt, loc='upper center', bbox_to_anchor=(0.5, 0.95), ncol=3)
+                fig.legend(handles, labels_plt, loc='upper center', bbox_to_anchor=(0.5, 1.00), ncol=3)
 
 
         # Save plot with neuron index in filename

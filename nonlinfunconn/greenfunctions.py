@@ -232,6 +232,7 @@ class GreenFunctions:
         self,
         dt: float,
         x: Optional[np.ndarray],
+        target_nodes: Optional[np.ndarray] = None,
         fit_linear_model: bool = False,
         parameter_to_fit_list: Optional[list] = None,
         constrain=None, 
@@ -258,9 +259,13 @@ class GreenFunctions:
 
         n_trials, n_nodes, time_len = target.shape
         
-        p = self.model_instance.parameters if p0 is None else p0
+        target_nodes = target_nodes if target_nodes is not None else np.arange(n_nodes)
+        n_targets = len(target_nodes)
+
         if parameter_to_fit_list is not None:
-            p = {k: v for k, v in p.items() if k in parameter_to_fit_list}
+            p = {k: v for k, v in self.model_instance.parameters.items() if k in parameter_to_fit_list}
+        else:
+            p = self.model_instance.parameters.copy() if p0 is None else p0
 
         m_dict = {k: np.zeros_like(v) for k, v in p.items()}
         v_dict = {k: np.zeros_like(v) for k, v in p.items()}
@@ -295,9 +300,9 @@ class GreenFunctions:
                     _, Y_pred = variant_self.model_instance.compute_direct_green_functions(X_trial, dt, p=p, return_estimated_V=True)
 
                 if loss_method == 'correlation':
-                    err += correlation_loss(Y_pred, Y_trial)
+                    err += correlation_loss(Y_pred[target_nodes], Y_trial[target_nodes])
                 else:
-                    err += np.sum(np.abs(Y_pred - Y_trial)) / (n_trials * n_nodes * time_len)
+                    err += np.sum(np.abs(Y_pred[target_nodes] - Y_trial[target_nodes])) / (n_trials * n_targets * time_len)
             return err 
 
         def compute_grad(param_dict, X, Y,param_scale =None, epsilon_factor=1e-3):
@@ -314,7 +319,6 @@ class GreenFunctions:
 
                 def compute_single_grad(idx):
                     perturbed = copy.deepcopy(param_dict)
-                    perturbed[key] = param_dict[key].copy()
                     perturbed[key][idx] += epsilon
                     loss_eps = loss(copy.deepcopy(self), perturbed, X, Y)  # deepcopy to ensure a fresh green function for the perturbed parameters, avoids modifing parameters of the main green function
                     return (loss_eps - loss_0) / epsilon

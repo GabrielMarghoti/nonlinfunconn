@@ -70,10 +70,9 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     syn_edge_weights = normalize_weights(np.array(syn_edge_weights))
 
     # Define layout
-    pos = positions if positions is not None else nx.spring_layout(
-        G, k=0.1, fixed=[0], pos={0: (1, 0)}
-    ) 
-    
+    pos = positions if positions is not None else nx.circular_layout(G)
+    # nx.spring_layout(G, k=0.1, fixed=[0], pos={0: (1, 0)})
+
     # Node size is proportional to the sum of weights of incoming and outgoing edges
     node_strengths = np.zeros(num_nodes)
     for j in range(num_nodes):
@@ -81,7 +80,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         node_strengths[j] = np.sum(np.abs(Ggap[:, j])) + np.sum(np.abs(Gsyn[:, j]))
     
     # Normalize node sizes to a reasonable range (e.g., 100 to 1000)
-    min_size, max_size = 1000, 2000
+    min_size, max_size = 1200, 2000
     if np.max(node_strengths) > 0:
         node_sizes = min_size + (max_size - min_size) * (node_strengths - np.min(node_strengths)) / (np.max(node_strengths) - np.min(node_strengths))
     else:

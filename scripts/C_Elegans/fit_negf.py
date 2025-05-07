@@ -224,7 +224,7 @@ Ci = params['C'] # Membrane capacitance 1 F
 
 Ci = 1e12*Ci  # pF
 
-Ci = 100*Ci #  to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
+Ci = 500*Ci #  to change the dynamics for the time scale of calcium concentration/fluorescence instead of membrane potentials # to review latter
 
 Gcell = 1e12*params['Gcell'] # Leakage conductance of membrane [pS]
 Ecell = params['Ecell']*1000 # Leakage potential [mV]
@@ -308,7 +308,7 @@ for (i_folder, folder) in enumerate(ds_list):
         num_stimulations = len(stimulations_idx)
 
         # Skip datasets where the number of stimulations is not between 2 and 3
-        if not (2 <= num_stimulations <= 4): 
+        if not (3 <= num_stimulations <= 4): 
             continue
 
         stim_neuron_label = labels[stim]
@@ -392,7 +392,13 @@ for (i_folder, folder) in enumerate(ds_list):
         
         n_responding = len(responding)
 
-        if n_responding > 20 or n_responding < 4:
+        responding_labels = np.array(labels)[responding]  # Create an array of labels for responding indexes
+        labeled_neurons = [label != "" for label in responding_labels]  # Create a boolean list for non-empty labels
+
+
+        n_responding_labeled = len(np.array(responding)[labeled_neurons])
+
+        if n_responding > 14 or n_responding_labeled < 5:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
@@ -424,14 +430,15 @@ for (i_folder, folder) in enumerate(ds_list):
         print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
 
 
-        if np.mean(responses_correlations[0]) < 0.55:
+        if np.mean(responses_correlations[0]) < 0.6:
             print(f"Skipping dataset {folder} with low stimuli correlations.")
             continue
         
         # Responding parameters positions
         # review: consider the most similar labels if it does not match exactly
         responding_positions = []
-        for i in responding:
+        for i in range(len(responding)):
+            if not labeled_neurons[i]: continue
             for key in anatlas_positions:
                 if labels[i].startswith(key):
                     responding_positions.append(anatlas_positions[key])
@@ -445,7 +452,8 @@ for (i_folder, folder) in enumerate(ds_list):
                 elif key.startswith(labels[i][:2]):
                     responding_positions.append(anatlas_positions[key])
                     break
-        if len(responding_positions) != len(responding):
+                
+        if len(responding_positions) != np.sum(labeled_neurons):
             print(f"Warning: Mismatch in responding positions for dataset {folder}.")
             continue
 
@@ -465,13 +473,13 @@ for (i_folder, folder) in enumerate(ds_list):
         Es = Esyn[responding][:, responding]
 
         # Plot gamma_g and gamma_s as heatmaps
-        nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, np.array(labels)[responding], os.path.join(fig_dir, 'gamma_g_gamma_s_heatmaps.png'))
+        nlfc.utils.netplots.connect_matrices_heatmap(gamma_g, gamma_s, responding_labels, os.path.join(fig_dir, 'gamma_g_gamma_s_heatmaps.png'))
         # plot neural network
-        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, np.array(labels)[responding], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_original_parameters.png'))
+        nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, responding_labels, save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_original_parameters.png'))
         
         kunert_parameters.update({
             "gamma_g": gamma_g,
-            "gamma_s": gamma_s,
+            "gamma_s":  gamma_s,
             "E_s": Es
         })
 
@@ -500,7 +508,7 @@ for (i_folder, folder) in enumerate(ds_list):
         )
 
         G  = lif_gf.total_G(G_degree)
-
+        '''
         for ie_idx, ie in enumerate(stimulations_idx):
              
             os.makedirs(ie_dir_list[ie_idx], exist_ok=True)
@@ -512,7 +520,7 @@ for (i_folder, folder) in enumerate(ds_list):
                     if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): continue
                     nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
                     nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-
+        '''
 
 
         #########################################################################################################################################################
@@ -520,7 +528,7 @@ for (i_folder, folder) in enumerate(ds_list):
         # FIT NEGF
         
         # Lower the sampling rate so fitting is not so time consuming
-        lowering_resolution_step = 10
+        lowering_resolution_step = 20
 
         print("NEGF fitting")
         min_constrain_dict = {
@@ -542,7 +550,7 @@ for (i_folder, folder) in enumerate(ds_list):
                         "a_d": np.inf,  
                         "gamma_g": np.inf,
                         "gamma_s": np.inf,
-                        "E_s": 50,
+                        "E_s": 100,
                         "E_c": 100,  
                         }
 
@@ -550,10 +558,9 @@ for (i_folder, folder) in enumerate(ds_list):
             x=Y_smooth_total[:, responding, shift_vol::lowering_resolution_step],
             dt=lowering_resolution_step * fconn.Dt,
             fit_linear_model=kwar_fit_lineal_model,
-            max_iters=20,
-            include_adj_matrix=True,
-            constrain=(min_constrain_dict, max_constrain_dict),
-            rms_tol=1e-4,
+            max_iters=30,
+            #constrain=(min_constrain_dict, max_constrain_dict),
+            rms_tol=1e-5,
             #parameter_to_fit_list=['C', 'gamma', 'E_c', 'beta', 'a_r', 'a_d'],
             #loss_method='correlation'
         )
@@ -568,11 +575,11 @@ for (i_folder, folder) in enumerate(ds_list):
         #########################################################################################################################################################
         
         # plot neural network after fitting
-        nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], np.array(labels)[responding], positions=responding_positions[:, :2], save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit.png'))
+        nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_labels, save_path=os.path.join(fig_dir, f'Neural_Network_responding_only_after_fit.png'))
     
-        ####
+        ######
         # Plot
-        ####
+        ######
         nrows = max(1,int(np.sqrt(num_neurons)))
         ncols = int(np.sqrt(num_neurons))+2
         if plot:
@@ -669,14 +676,14 @@ for (i_folder, folder) in enumerate(ds_list):
                     neu_j = responding[j]
                     delta_j = Y_smooth_total[ie_idx][neu_j, shift_vol:] - Y_smooth_total[ie_idx][neu_j, shift_vol]
                     Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=fconn.Dt)
-                
+                    '''
                     if i == 0 or (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-04)): 
                         continue
                     #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
                     nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
                     #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
                     nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {labels[neu_i]}<-{labels[neu_j]}", save_path= os.path.join(ie_dir_list[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{labels[neu_i]}<-{labels[neu_j]}.png'))
-
+                    '''
         ###############
         # PREPARE PANELS PLOT
         ###############
@@ -818,7 +825,7 @@ for (i_folder, folder) in enumerate(ds_list):
 
             fit_y =  pp.convolution(stim_y, lin_kernel, fconn.Dt,8)
             fit_ls = "-"
-            fit_lbl = "Linear kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
+            fit_lbl = "Linear kernel prediction" #"|".join([str(nbp - 1) for nbp in n_branch_params])
             if neu_i == stim:
                 panel_title = "Stimulated "+ panel_title
                 #ax2[0].plot(time_fit, stim_y, label="Filtered Stim.", c='yellow', lw=1)
@@ -855,8 +862,8 @@ for (i_folder, folder) in enumerate(ds_list):
 
         # Flatten the matrices for scatter plotting
         distances = distance_matrix.flatten()
-        gamma_g_values = fitted_parameters["gamma_g"].flatten()
-        gamma_s_values = fitted_parameters["gamma_s"].flatten()
+        gamma_g_values = fitted_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten()
+        gamma_s_values = fitted_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten()
 
         # Plot gamma_g vs distance
         valid_indices = [i for i, d in enumerate(distances) if d is not None]
@@ -882,8 +889,8 @@ for (i_folder, folder) in enumerate(ds_list):
         plt.savefig(os.path.join(fig_dir, "gamma_vs_distance_scatter.png"), bbox_inches="tight")
         plt.close(fig)
 
-        gamma_g_total.extend(fitted_parameters["gamma_g"].flatten())
-        gamma_s_total.extend(fitted_parameters["gamma_s"].flatten())
+        gamma_g_total.extend(fitted_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
+        gamma_s_total.extend(fitted_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
         distances_total.extend(distances.flatten())
 
         # Save data

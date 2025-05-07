@@ -233,15 +233,12 @@ class GreenFunctions:
         dt: float,
         x: Optional[np.ndarray],
         fit_linear_model: bool = False,
-        include_adj_matrix: bool = True,
         parameter_to_fit_list: Optional[list] = None,
-        n_neigh_max: int = 2,
-        rms_limits: Optional[Tuple[int, int]] = None,
         constrain=None, 
         auto_stop: bool = True,
         rms_tol: float = 1e-5,
         max_iters: int = 1000,
-        learning_rate: float = 1e-3,
+        learning_rate: float = 1e-2,
         beta1: float = 0.9,
         beta2: float = 0.999,
         eps: float = 1e-5,
@@ -259,6 +256,8 @@ class GreenFunctions:
 
         target = x
 
+        n_trials, n_nodes, time_len = target.shape
+        
         p = self.model_instance.parameters if p0 is None else p0
         if parameter_to_fit_list is not None:
             p = {k: v for k, v in p.items() if k in parameter_to_fit_list}
@@ -285,26 +284,25 @@ class GreenFunctions:
                 delta_X = X_trial - X_trial[:, [0]]
 
                 if fit_linear_model:
-                    g0 = variant_self.compute_direct_equilibrium_green_functions(num_nodes=self.n_nodes, time_len=Y_trial.shape[1], dt=dt, p=p)
-                    est_V = np.zeros((variant_self.num_nodes, self.time_len)) 
-                    for i in range(variant_self.num_nodes):
-                        est_V[i] += X_trial[:, [0]]
-                        for j in range(variant_self.num_nodes):
+                    g0 = variant_self.model_instance.compute_direct_equilibrium_green_functions(time_len=time_len, dt=dt, p=p)
+                    est_V = np.zeros_like(X_trial) 
+                    for i in range(n_nodes):
+                        est_V[i] += X_trial[i, 0]
+                        for j in range(n_nodes):
                             est_V[i] += nontt_conv(g0[i, j], delta_X[j], dt)
                     Y_pred = est_V
                 else:
-                    _, Y_pred = self.model_instance.compute_direct_green_functions(X_trial, dt, p=p, return_estimated_V=True)
+                    _, Y_pred = variant_self.model_instance.compute_direct_green_functions(X_trial, dt, p=p, return_estimated_V=True)
 
                 if loss_method == 'correlation':
                     err += correlation_loss(Y_pred, Y_trial)
                 else:
-                    err += sum(np.sqrt(np.sum((Y_pred - Y_trial) ** 2, 0))) / (self.n_trials * self.time_len * self.n_nodes)
+                    err += np.sum(np.abs(Y_pred - Y_trial)) / (n_trials * n_nodes * time_len)
             return err 
 
-        def compute_grad(param_dict, X, Y,param_scale =None, epsilon_factor=1e-4):
+        def compute_grad(param_dict, X, Y,param_scale =None, epsilon_factor=1e-3):
             loss_0 = loss(self, param_dict, X, Y)
             grad_dict = {}
-            epsilon = {}
 
             for key in param_dict:
                 grad_dict[key] = np.zeros_like(param_dict[key])
@@ -312,22 +310,21 @@ class GreenFunctions:
                     max_val = param_scale[key]
                 else:
                     max_val = np.max(np.abs(param_dict[key])) if np.max(np.abs(param_dict[key])) > 0 else 1.0
-                epsilon[key] = epsilon_factor * max_val
+                epsilon = epsilon_factor * max_val
 
-            def compute_single_grad(idx):
-                perturbed = copy.deepcopy(param_dict)
-                perturbed[key] = param_dict[key].copy()
-                perturbed[key][idx] += epsilon[key]
-                loss_eps = loss(copy.deepcopy(self), perturbed, X, Y)
-                return (loss_eps - loss_0) / epsilon[key]
-            
-
-            for key in param_dict:
-
+                def compute_single_grad(idx):
+                    perturbed = copy.deepcopy(param_dict)
+                    perturbed[key] = param_dict[key].copy()
+                    perturbed[key][idx] += epsilon
+                    loss_eps = loss(copy.deepcopy(self), perturbed, X, Y)  # deepcopy to ensure a fresh green function for the perturbed parameters, avoids modifing parameters of the main green function
+                    return (loss_eps - loss_0) / epsilon
+                
                 if np.isscalar(param_dict[key]):
                     grads = [compute_single_grad(0)]
                 else:
-                    grads = Parallel(n_jobs=-1)(delayed(compute_single_grad)(i) for i in np.ndindex(param_dict[key].shape))
+                    grads = Parallel(n_jobs=-1)(
+                        delayed(compute_single_grad)(i) for i in list(np.ndindex(param_dict[key].shape))
+                    )
                 grad_dict[key] = np.array(grads).reshape(param_dict[key].shape)
 
             return grad_dict
@@ -373,3 +370,97 @@ class GreenFunctions:
         ))
 
         return  self.model_instance.parameters
+
+
+
+
+
+    def fit_p_array(
+        self,
+        Y: np.ndarray,
+        dt=None,
+        fit_linear_model: bool = False,
+        fit_param=None,
+        n_neigh_max: int = 2,
+        rms_limits: Optional[Tuple[int, int]] = None,
+        auto_stop: bool = True,
+        rms_tol: float = 1e-3,
+        max_iters: int = 1000,
+        learning_rate: float = 1e-2,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+        p0: Optional[np.ndarray] = None,
+    ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
+        """
+        Fit the model using Adam gradient descent.
+        """
+
+        n_trials, time_len, n_neurons = Y.shape
+        if dt is not None:
+            self.dt = dt
+        else:
+            raise ValueError("Time step (dt) must be provided.")
+
+        # Initialize parameters
+        p0 = self.get_parameters_array() if p0 is None else p0
+        p = p0.copy()
+        m = np.zeros_like(p)
+        v = np.zeros_like(p)
+
+        def loss(p, X, Y):
+            Y_pred = np.zeros_like(Y)
+            err = 0.0
+            for trial_idx in range(X.shape[0]):
+                if fit_linear_model:
+                    g0 = self.model_instance.compute_direct_equilibrium_green_functions(
+                        time_len=time_len, dt=self.dt, p=p
+                    )
+                    est_V = np.zeros_like(Y[trial_idx])
+                    for i in range(n_neurons):
+                        est_V[i] += Y[trial_idx, i, 0]
+                        for j in range(n_neurons):
+                            est_V[i] += nontt_conv(g0[i, j], Y[trial_idx, j] - Y[trial_idx, j, 0], self.dt)
+                    Y_pred[trial_idx] = est_V
+                else:
+                    _, Y_pred[trial_idx] = self.model_instance.compute_direct_green_functions(
+                        Y[trial_idx], dt=self.dt, p=p, return_estimated_V=True
+                    )
+                err += np.sqrt(np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2))
+            return err / (n_trials * time_len * n_neurons)
+
+        def compute_grad(p, X, Y, epsilon=1e-3):
+            grad = np.zeros_like(p)
+            loss_0 = loss(p, X, Y)
+            for i in range(len(p)):
+                p_eps = p.copy()
+                p_eps[i] += epsilon
+                loss_eps = loss(p_eps, X, Y)
+                grad[i] = (loss_eps - loss_0) / epsilon
+            return grad
+
+        prev_loss = float("inf")
+        for t in range(1, max_iters + 1):
+            grad = compute_grad(p, Y, Y)
+
+            m = beta1 * m + (1 - beta1) * grad
+            v = beta2 * v + (1 - beta2) * (grad ** 2)
+
+            m_hat = m / (1 - beta1 ** t)
+            v_hat = v / (1 - beta2 ** t)
+
+            p -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
+
+            current_loss = loss(p, Y, Y)
+            if t % 10 == 0 or t == 1:
+                print(f"Iteration {t}, Loss: {current_loss:.6f}")
+
+            if auto_stop and abs(prev_loss - current_loss) < rms_tol:
+                print(f"Early stopping at iteration {t}. Loss improvement < {rms_tol}")
+                break
+            prev_loss = current_loss
+
+        # Update model parameters
+        self.set_parameters(p)
+
+        return p, None, None

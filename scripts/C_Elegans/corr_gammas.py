@@ -26,9 +26,6 @@ matchless_nan_th_from_file = "--matchless-nan-th-from-file" in sys.argv
 matchless_nan_th_added_only = "--matchless-nan-th-added-only" in sys.argv
 merge = "--no-merge" not in sys.argv
 ds_exclude_tags =  None
-kwar_fit_lineal_model  = "--fit-linear" in sys.argv
-
-load_cache = "--load-cache" in sys.argv
 
 aconn_ds_i = None # default is loading from funatlas, if aconn_ds_i is set, it will load from the specified dataset
 # default 
@@ -322,9 +319,7 @@ for (i_folder, folder) in enumerate(ds_list):
         #  Set output directories
         fig_dir = figures_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/paths_dyn_connectome"
         data_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/paths_dyn_connectome"
-        if kwar_fit_lineal_model:
-            fig_dir += "_equilibirum"
-            data_dir += "_equilibirum"
+
         fig_dir   += "/"
         data_dir  += "/"
 
@@ -385,19 +380,28 @@ for (i_folder, folder) in enumerate(ds_list):
         
         n_responding = len(responding)
 
+        responding_labels = np.array(labels)[responding]  # Create an array of labels for responding indexes
+        labeled_neurons = [label != "" for label in responding_labels]  # Create a boolean list for non-empty labels
+
+        n_responding_labeled = len(np.array(responding)[labeled_neurons])
+
         if n_responding > 20 or n_responding < 4:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
 
-        if any(label == '' for label in np.array(labels)[responding]):
-            print(f"Skipping dataset {folder} with some responding neuron not identified.")
-            continue
+        #if any(label == '' for label in np.array(labels)[responding]):
+        #    print(f"Skipping dataset {folder} with some responding neuron not identified.")
+        #    continue
 
         # plot complete neural network 
         #nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(fig_dir, f'Neural_Network_total.png'))
 
-        Y_total = np.concatenate(Y_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
-        Y_smooth_total = np.concatenate(Y_smooth_total, axis=0)  # Concatenate along the new axis to maintain 3D structure
+        try:
+            Y_total = np.concatenate(Y_total, axis=0)  # Concatenate along the new axis to maintain structure
+            Y_smooth_total = np.concatenate(Y_smooth_total, axis=0)  # Concatenate along the new axis to maintain structure
+        except ValueError as e:
+            print(f"Skipping dataset {folder} due to concatenation error: {e}")
+            continue
 
         responses_correlations = np.zeros((n_responding, num_stimulations, num_stimulations))
         trial_variations = np.zeros(n_responding)
@@ -417,14 +421,15 @@ for (i_folder, folder) in enumerate(ds_list):
         print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
 
 
-        if np.mean(responses_correlations[0]) < 0.55:
+        if np.mean(responses_correlations[0]) < 0.6:
             print(f"Skipping dataset {folder} with low stimuli correlations for the target.")
             continue
         
         # Responding parameters positions
         # review: consider the most similar labels if it does not match exactly
         responding_positions = []
-        for i in responding:
+        for i in range(len(responding)):
+            if not labeled_neurons[i]: continue
             for key in anatlas_positions:
                 if labels[i].startswith(key):
                     responding_positions.append(anatlas_positions[key])
@@ -438,13 +443,17 @@ for (i_folder, folder) in enumerate(ds_list):
                 elif key.startswith(labels[i][:2]):
                     responding_positions.append(anatlas_positions[key])
                     break
-        if len(responding_positions) != len(responding):
+                else:
+                    labeled_neurons[i] = False
+
+
+        if len(responding_positions) != np.sum(labeled_neurons) or  len(responding_positions) == 0:
             print(f"Warning: Mismatch in responding positions for dataset {folder}.")
             continue
 
         responding_positions = np.array(responding_positions)
-
-        responding_positions = np.array(responding_positions)
+        print("Responding positions: ", responding_positions)
+        print('labeled neurons: ', labeled_neurons)
         distance_matrix = np.linalg.norm(responding_positions[:, np.newaxis, :] - responding_positions[np.newaxis, :, :], axis=-1)
 
         # Ensure the directories for figures and data exist
@@ -472,15 +481,15 @@ for (i_folder, folder) in enumerate(ds_list):
         })
         print('ds_tags: ', ds_tags[i_folder])
         if "wt" in ds_tags[i_folder]:
-            gamma_g_connectome_wt.extend(gamma_g.flatten())
-            gamma_s_connectome_wt.extend(gamma_s.flatten())
-            gamma_g_fitted_wt.extend(model_parameters["gamma_g"].flatten())
-            gamma_s_fitted_wt.extend(model_parameters["gamma_s"].flatten())
+            gamma_g_connectome_wt.extend(gamma_g[labeled_neurons][:, labeled_neurons].flatten())
+            gamma_s_connectome_wt.extend(gamma_s[labeled_neurons][:, labeled_neurons].flatten())
+            gamma_g_fitted_wt.extend(model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
+            gamma_s_fitted_wt.extend(model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
         elif "unc31" in ds_tags[i_folder]:
-            gamma_g_connectome_unc31.extend(gamma_g.flatten())
-            gamma_s_connectome_unc31.extend(gamma_s.flatten())
-            gamma_g_fitted_unc31.extend(model_parameters["gamma_g"].flatten())
-            gamma_s_fitted_unc31.extend(model_parameters["gamma_s"].flatten())
+            gamma_g_connectome_unc31.extend(gamma_g[labeled_neurons][:, labeled_neurons].flatten())
+            gamma_s_connectome_unc31.extend(gamma_s[labeled_neurons][:, labeled_neurons].flatten())
+            gamma_g_fitted_unc31.extend(model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
+            gamma_s_fitted_unc31.extend(model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
        
         
 # Scatter plot gamma_g and gamma_s: connectome vs fitted

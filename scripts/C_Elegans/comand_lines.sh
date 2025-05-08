@@ -12,3 +12,8 @@ python3 scripts/C_Elegans/fit_negf.py  --folder:figures --signal:green --no-merg
 
 # All worms:
 python3 scripts/C_Elegans/fit_negf.py  --folder:figures --signal:green --no-merge --load-cache
+
+
+
+# Correlation between fitted adjancy matrix and connetome
+python3 scripts/C_Elegans/corr_gammas.py  --folder:figures --signal:green --no-merge

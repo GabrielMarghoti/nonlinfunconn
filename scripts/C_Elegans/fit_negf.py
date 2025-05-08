@@ -398,9 +398,14 @@ for (i_folder, folder) in enumerate(ds_list):
 
         n_responding_labeled = len(np.array(responding)[labeled_neurons])
 
-        if n_responding > 12 or n_responding_labeled < 4:
+        if n_responding_labeled > 12 or n_responding_labeled < 3:
+            print(f"Skipping dataset {folder} with {n_responding_labeled} labeled responding neurons.")
+            continue
+        
+        if n_responding > 12 or n_responding < 4:
             print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
             continue
+
 
         #if any(label == '' for label in np.array(labels)[responding]):
         #    print(f"Skipping dataset {folder} with some responding neuron not identified.")
@@ -458,8 +463,7 @@ for (i_folder, folder) in enumerate(ds_list):
             continue
 
         responding_positions = np.array(responding_positions)
-
-        responding_positions = np.array(responding_positions)
+        
         distance_matrix = np.linalg.norm(responding_positions[:, np.newaxis, :] - responding_positions[np.newaxis, :, :], axis=-1)
 
         # Ensure the directories for figures and data exist
@@ -803,7 +807,7 @@ for (i_folder, folder) in enumerate(ds_list):
                     ax2[0].set_xlim(time_plt[0], time_plt[-1])
                     ax2[0].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
                     ax2[0].axvline(0, c="k", alpha=0.5, label="stim. time")
-                    ax2[0].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Training")
+                    ax2[0].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Fitting")
                     #ax2[0].axvline(fconn.next_stim_after_n_vol[ie] * fconn.Dt, c="k", alpha=0.5)
 
                 elif neu_i == most_variable_neuron:
@@ -815,7 +819,7 @@ for (i_folder, folder) in enumerate(ds_list):
                     ax2[1].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
                     ax2[1].plot(time_fit, Y_nonlin_fit[ie_idx,i], label="Nonlinear kernel pred.", lw=2, ls='--', c=stim_color)
                     ax2[1].axvline(0, c="k", alpha=0.5, label="stim. time")
-                    ax2[1].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Training")
+                    ax2[1].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Fitting")
 
                 ax[ax_r, ax_c].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
                 #ax[ax_r, ax_c].plot(time_fit, fit_y_trial, label=fit_lbl, c=stim_color, lw=1, ls=':')
@@ -862,7 +866,7 @@ for (i_folder, folder) in enumerate(ds_list):
             ax[ax_r, ax_c].set_xlim(time_plt[0], time_plt[-1])
             ax[ax_r, ax_c].set_ylim(np.nanmin(Y_smooth_total[:, neu_i, :]), np.nanmax(Y_smooth_total[:, neu_i, :]))
             ax[ax_r, ax_c].axvline(0, c="k", alpha=0.8)
-            ax[ax_r, ax_c].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Training")
+            ax[ax_r, ax_c].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Fitting")
             
 
             ax[ax_r, ax_c].set_title(panel_title, fontsize=10)

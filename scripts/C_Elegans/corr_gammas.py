@@ -27,12 +27,15 @@ matchless_nan_th_added_only = "--matchless-nan-th-added-only" in sys.argv
 merge = "--no-merge" not in sys.argv
 ds_exclude_tags =  None
 
+kwar_fit_lineal_model  = "--fit-linear" in sys.argv
+kwar_use_not_labeled_neurons = "--use-not-labeled-neurons" in sys.argv
+
 aconn_ds_i = None # default is loading from funatlas, if aconn_ds_i is set, it will load from the specified dataset
 # default 
 figures_folder = "figures/C_elegans_pumpprobre_exp/"
 data_folder = "data/C_elegans_pumpprobre_exp/"
 
-ds_list_path =  "/home/gabrielm/paper_reproduction/ds_list_full.txt"
+ds_list_path = "/home/gabrielm/paper_reproduction/ds_list_full.txt"
 
 ds_list_spont_path = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
 
@@ -284,214 +287,231 @@ for (i_folder, folder) in enumerate(ds_list):
     stim_neurons_analyzed = set()   
     
     for stim in fconn.stim_neurons[fconn.stim_neurons > 0]:
-        # Get the stimulation neurons
-        if stim in stim_neurons_analyzed:
-            continue
-        stim_neurons_analyzed.add(stim)
-
-        #stim = np.bincount(fconn.stim_neurons[fconn.stim_neurons > 0]).argmax()
-        stimulations_idx = np.where(fconn.stim_neurons == stim)[0]
-
-        num_stimulations = len(stimulations_idx)
-
-        # Skip datasets where the number of stimulations is not between 2 and 3
-        if not (2 <= num_stimulations <= 4): 
-            continue
-
-        stim_neuron_label = labels[stim]
-
-        print("Analyzing source neuron", stim, ":", stim_neuron_label)     
-
-        responding = set()  # Initialize a set to store all responding neurons across all ie stimulation loops
-        Y_total = []
-        Y_smooth_total = []
-
-        shift_vol = None
-        i0 = max(0, fconn.i0s[stimulations_idx[0]])  # start of the stimulation
-        i1 = fconn.i1s[stimulations_idx[0]]          # end of the stimulation
-        shift_vol = fconn.shift_vols[0]
-        time_plt = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  
-        time_plt_len = len(time_plt)
-        
-        time_fit = np.arange(time_plt_len- shift_vol) * fconn.Dt  
-        time_fit_len = len(time_fit)
-
-        #  Set output directories
-        fig_dir = figures_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/paths_dyn_connectome"
-        data_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/paths_dyn_connectome"
-
-        fig_dir   += "/"
-        data_dir  += "/"
-
-
-        cache_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/fit_negf/"
-
-        ie_dir_list = []
-
-        for ie in stimulations_idx:  # stimulation index only though cases which the most stimulated neuron is stimulated
-            responding_ie = fconn.resp_neurons_by_stim[ie]
-            i0 = max(0, fconn.i0s[ie])  # start of the stimulation
-            i1 = fconn.i1s[ie]         # end of the stimulation
-
-            responding.update(responding_ie)  # Add the responding neurons to the set
-
-            n_responding_ie = len(responding_ie)
-            
-            # Ensure output directory exists
-            ie_dir = fig_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
-
-            ie_dir_list.append(ie_dir)
-                
-            Y = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")[0:time_plt_len, :].transpose()
-            Y_smooth = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")[0:time_plt_len, :].transpose()
-
-            Y_total.append(Y[np.newaxis, ...])  # Add a new axis to ensure 3D structure
-            Y_smooth_total.append(Y_smooth[np.newaxis, ...])  # Add a new axis to ensure 3D structure
-        
-        if stim not in responding: 
-            print('Stim. neuron not responsive')
-            continue 
-            #responding.update([stim]) 
-
-        responding = list(responding)
-        
-        # Insert the stimulated neuron at the beginning of the responding list
-        responding.remove(stim)
-        responding.insert(0, stim)
-        
-
-        # Find first neighbors (nodes connected to stim via either gap or syn)
-        first_neighbors = np.where((Ggap[:, stim] > 0) | (Gsyn[:, stim] > 0))[0]
-        responsive_first_neighbors = [first_neighbors[i] for i in range(len(first_neighbors)) if first_neighbors[i] in responding] # filter nonresponsive first neigbors
-
-        # Find second neighbors (nodes connected to first neighbors via either gap or syn)
-        second_neighbors = np.where((np.sum(list(Ggap[:, responsive_first_neighbors]), axis=1) > 0) | 
-                                    (np.sum(list(Gsyn[:, responsive_first_neighbors]), axis=1) > 0))[0]
-        
-        responsive_second_neighbors = [second_neighbors[i] for i in range(len(second_neighbors)) if second_neighbors[i] in responding] # filter nonresponsive first neigbors
-
-        # Create a set of allowed nodes (stim + first + second neighbors)
-        allowed_nodes = set([stim]).union(set(responsive_first_neighbors)).union(set(responsive_second_neighbors))
-        
-        # Filter responding list to only include allowed nodes # check again if is responsive
-        first_second_responsive_nodes = [node for node in responding if node in allowed_nodes]
-        
-        responding = first_second_responsive_nodes # = list(responding) # consider all responsive neurons
-        
-        n_responding = len(responding)
-
-        responding_labels = np.array(labels)[responding]  # Create an array of labels for responding indexes
-        labeled_neurons = [label != "" for label in responding_labels]  # Create a boolean list for non-empty labels
-
-        n_responding_labeled = len(np.array(responding)[labeled_neurons])
-
-        if n_responding > 20 or n_responding < 4:
-            print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
-            continue
-
-        #if any(label == '' for label in np.array(labels)[responding]):
-        #    print(f"Skipping dataset {folder} with some responding neuron not identified.")
-        #    continue
-
-        # plot complete neural network 
-        #nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(fig_dir, f'Neural_Network_total.png'))
 
         try:
-            Y_total = np.concatenate(Y_total, axis=0)  # Concatenate along the new axis to maintain structure
-            Y_smooth_total = np.concatenate(Y_smooth_total, axis=0)  # Concatenate along the new axis to maintain structure
-        except ValueError as e:
-            print(f"Skipping dataset {folder} due to concatenation error: {e}")
-            continue
+            # Get the stimulation neurons
+            if stim in stim_neurons_analyzed:
+                continue
+            stim_neurons_analyzed.add(stim)
 
-        responses_correlations = np.zeros((n_responding, num_stimulations, num_stimulations))
-        trial_variations = np.zeros(n_responding)
+            #stim = np.bincount(fconn.stim_neurons[fconn.stim_neurons > 0]).argmax()
+            stimulations_idx = np.where(fconn.stim_neurons == stim)[0]
 
-        for i in range(n_responding):
-            neu_i = responding[i]
-            responses_correlations[i, :, :] = np.corrcoef(
-                        Y_smooth_total[:, neu_i, shift_vol:]
-                    )
-            # Calculate the standard deviation of the correlation matrix for each neuron
-            trial_variations[i] = np.std(responses_correlations[i, :, :])
+            num_stimulations = len(stimulations_idx)
 
-        # Find the neuron with the most variation in trial correlations
-        most_variable_neuron_idx = np.argmax(trial_variations)
-        most_variable_neuron = responding[most_variable_neuron_idx] 
+            # Skip datasets where the number of stimulations is not between 2 and 3
+            if not (2 <= num_stimulations <= 4): 
+                continue
 
-        print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
+            stim_neuron_label = labels[stim]
+
+            print("Analyzing source neuron", stim, ":", stim_neuron_label)     
+
+            responding = set()  # Initialize a set to store all responding neurons across all ie stimulation loops
+            Y_total = []
+            Y_smooth_total = []
+
+            shift_vol = None
+            i0 = max(0, fconn.i0s[stimulations_idx[0]])  # start of the stimulation
+            i1 = fconn.i1s[stimulations_idx[0]]          # end of the stimulation
+            shift_vol = fconn.shift_vols[0]
+            time_plt = (np.arange(i1 - i0) - shift_vol) * fconn.Dt  
+            time_plt_len = len(time_plt)
+            
+            time_fit = np.arange(time_plt_len- shift_vol) * fconn.Dt  
+            time_fit_len = len(time_fit)
+
+            #  Set output directories
+            fig_dir = figures_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/paths_dyn_connectome"
+            data_dir = data_folder + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}_{num_stimulations}x/fit_negf"
+            if kwar_fit_lineal_model:
+                fig_dir += "_equilibirum"
+                data_dir += "_equilibirum"
+
+            if kwar_use_not_labeled_neurons:
+                fig_dir += "_consider_not_labeled_neurons"
+                data_dir += "_consider_not_labeled_neurons"
 
 
-        if np.mean(responses_correlations[0]) < 0.6:
-            print(f"Skipping dataset {folder} with low stimuli correlations for the target.")
-            continue
+            fig_dir   += "/"
+            data_dir  += "/"
+
+
+            cache_dir = data_dir
+
+            ie_dir_list = []
+
+            for ie in stimulations_idx:  # stimulation index only though cases which the most stimulated neuron is stimulated
+                responding_ie = fconn.resp_neurons_by_stim[ie]
+                i0 = max(0, fconn.i0s[ie])  # start of the stimulation
+                i1 = fconn.i1s[ie]         # end of the stimulation
+
+                responding.update(responding_ie)  # Add the responding neurons to the set
+
+                n_responding_ie = len(responding_ie)
+                
+                # Ensure output directory exists
+                ie_dir = fig_dir + f"n_resp_neurons_{n_responding_ie}_ie_trial{ie}/"
+
+                ie_dir_list.append(ie_dir)
+                    
+                Y = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=True, baseline_mode="constant")[0:time_plt_len, :].transpose()
+                Y_smooth = sig.get_segment(i0, i1, shift_vol, unsmoothed_data=False, baseline_mode="constant")[0:time_plt_len, :].transpose()
+
+                Y_total.append(Y[np.newaxis, ...])  # Add a new axis to ensure 3D structure
+                Y_smooth_total.append(Y_smooth[np.newaxis, ...])  # Add a new axis to ensure 3D structure
+            
+            if stim not in responding: 
+                print('Stim. neuron not responsive')
+                continue 
+                #responding.update([stim]) 
+
+            responding = list(responding)
+            
+            # Insert the stimulated neuron at the beginning of the responding list
+            responding.remove(stim)
+            responding.insert(0, stim)
+            
+
+            # Find first neighbors (nodes connected to stim via either gap or syn)
+            first_neighbors = np.where((Ggap[:, stim] > 0) | (Gsyn[:, stim] > 0))[0]
+            responsive_first_neighbors = [first_neighbors[i] for i in range(len(first_neighbors)) if first_neighbors[i] in responding] # filter nonresponsive first neigbors
+
+            # Find second neighbors (nodes connected to first neighbors via either gap or syn)
+            second_neighbors = np.where((np.sum(list(Ggap[:, responsive_first_neighbors]), axis=1) > 0) | 
+                                        (np.sum(list(Gsyn[:, responsive_first_neighbors]), axis=1) > 0))[0]
+            
+            responsive_second_neighbors = [second_neighbors[i] for i in range(len(second_neighbors)) if second_neighbors[i] in responding] # filter nonresponsive first neigbors
+
+            # Create a set of allowed nodes (stim + first + second neighbors)
+            allowed_nodes = set([stim]).union(set(responsive_first_neighbors)).union(set(responsive_second_neighbors))
+            
+            # Filter responding list to only include allowed nodes # check again if is responsive
+            first_second_responsive_nodes = [node for node in responding if node in allowed_nodes]
+            
+            responding = first_second_responsive_nodes # = list(responding) # consider all responsive neurons
+            
+            n_responding = len(responding)
+
+            responding_labels = np.array(labels)[responding]  # Create an array of labels for responding indexes
+            labeled_neurons = [label != "" for label in responding_labels]  # Create a boolean list for non-empty labels
+
+            n_responding_labeled = len(np.array(responding)[labeled_neurons])
+            if n_responding_labeled > 12 or n_responding_labeled < 3:
+                print(f"Skipping dataset {folder} with {n_responding_labeled} labeled responding neurons.")
+                continue
+            
+            if n_responding > 12 or n_responding < 4:
+                print(f"Skipping dataset {folder} with {n_responding} responding neurons.")
+                continue
+
+            if not kwar_use_not_labeled_neurons:
+                if any(label == '' for label in np.array(labels)[responding]):
+                    print(f"Skipping dataset {folder} with some responding neuron not identified.")
+                    continue
+
+            # plot complete neural network 
+            #nlfc.utils.netplots.neural_network((Ggap*ggap), (Gsyn*gsyn), Esyn, np.array(labels), positions=None, save_path=os.path.join(fig_dir, f'Neural_Network_total.png'))
+
+            try:
+                Y_total = np.concatenate(Y_total, axis=0)  # Concatenate along the new axis to maintain structure
+                Y_smooth_total = np.concatenate(Y_smooth_total, axis=0)  # Concatenate along the new axis to maintain structure
+            except ValueError as e:
+                print(f"Skipping dataset {folder} due to concatenation error: {e}")
+                continue
+
+            responses_correlations = np.zeros((n_responding, num_stimulations, num_stimulations))
+            trial_variations = np.zeros(n_responding)
+
+            for i in range(n_responding):
+                neu_i = responding[i]
+                responses_correlations[i, :, :] = np.corrcoef(
+                            Y_smooth_total[:, neu_i, shift_vol:]
+                        )
+                # Calculate the standard deviation of the correlation matrix for each neuron
+                trial_variations[i] = np.std(responses_correlations[i, :, :])
+
+            # Find the neuron with the most variation in trial correlations
+            most_variable_neuron_idx = np.argmax(trial_variations)
+            most_variable_neuron = responding[most_variable_neuron_idx] 
+
+            print(f"Neuron with most variation: {most_variable_neuron} ({labels[most_variable_neuron]})")
+
+
+            if np.mean(responses_correlations[0]) < 0.6:
+                print(f"Skipping dataset {folder} with low stimuli correlations for the target.")
+                continue
+            
+            # Responding parameters positions
+            # review: consider the most similar labels if it does not match exactly
+            responding_positions = []
+            for i in range(len(responding)):
+                if not labeled_neurons[i]: continue
+                for key in anatlas_positions:
+                    if labels[i].startswith(key):
+                        responding_positions.append(anatlas_positions[key])
+                        break
+                    elif key.startswith(labels[i]):
+                        responding_positions.append(anatlas_positions[key])
+                        break
+                    elif labels[i].startswith(key[:2]):
+                        responding_positions.append(anatlas_positions[key])
+                        break
+                    elif key.startswith(labels[i][:2]):
+                        responding_positions.append(anatlas_positions[key])
+                        break
+                    else:
+                        labeled_neurons[i] = False
+
+
+            if len(responding_positions) != np.sum(labeled_neurons) or  len(responding_positions) == 0:
+                print(f"Warning: Mismatch in responding positions for dataset {folder}.")
+                #continue
+
+            responding_positions = np.array(responding_positions)
+            print("Responding positions: ", responding_positions)
+            print('labeled neurons: ', labeled_neurons)
+            distance_matrix = np.linalg.norm(responding_positions[:, np.newaxis, :] - responding_positions[np.newaxis, :, :], axis=-1)
+
+            # Ensure the directories for figures and data exist
+            os.makedirs(fig_dir, exist_ok=True)
+            os.makedirs(data_dir, exist_ok=True)
+
+            cache_file_path = os.path.join(cache_dir, "fitted_parameters.pkl")
+            if os.path.exists(cache_file_path):
+                # Load parameters after fitting from the .pkl file
+                with open(cache_file_path, "rb") as f:  # 'rb' not 'r'
+                    model_parameters = pickle.load(f)
+            else:
+                print(f"Warning: Cache file '{cache_file_path}' does not exist. Skipping.")
+                continue
+            # save connectome based network considering only responsive neurons over all stimulations
+            gamma_g = (Ggap*ggap)[responding][:, responding] 
+            gamma_s = (Gsyn*gsyn)[responding][:, responding]
+            Es = Esyn[responding][:, responding]
+
+            kunert_parameters.update({
+                "gamma_g": gamma_g,
+                "gamma_s": gamma_s,
+                "E_s": Es
+            })
+            print('ds_tags: ', ds_tags[i_folder])
+            if "wt" in ds_tags[i_folder]:
+                gamma_g_connectome_wt.extend(gamma_g[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_connectome_wt.extend(gamma_s[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_g_fitted_wt.extend(model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_fitted_wt.extend(model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
+            elif "unc31" in ds_tags[i_folder]:
+                gamma_g_connectome_unc31.extend(gamma_g[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_connectome_unc31.extend(gamma_s[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_g_fitted_unc31.extend(model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_fitted_unc31.extend(model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
         
-        # Responding parameters positions
-        # review: consider the most similar labels if it does not match exactly
-        responding_positions = []
-        for i in range(len(responding)):
-            if not labeled_neurons[i]: continue
-            for key in anatlas_positions:
-                if labels[i].startswith(key):
-                    responding_positions.append(anatlas_positions[key])
-                    break
-                elif key.startswith(labels[i]):
-                    responding_positions.append(anatlas_positions[key])
-                    break
-                elif labels[i].startswith(key[:2]):
-                    responding_positions.append(anatlas_positions[key])
-                    break
-                elif key.startswith(labels[i][:2]):
-                    responding_positions.append(anatlas_positions[key])
-                    break
-                else:
-                    labeled_neurons[i] = False
+            pass
+        except Exception as e:
+            print(f"Error processing folder {folder}: {e}. stim neuron {stim_neuron_label}")
+            continue           
 
-
-        if len(responding_positions) != np.sum(labeled_neurons) or  len(responding_positions) == 0:
-            print(f"Warning: Mismatch in responding positions for dataset {folder}.")
-            continue
-
-        responding_positions = np.array(responding_positions)
-        print("Responding positions: ", responding_positions)
-        print('labeled neurons: ', labeled_neurons)
-        distance_matrix = np.linalg.norm(responding_positions[:, np.newaxis, :] - responding_positions[np.newaxis, :, :], axis=-1)
-
-        # Ensure the directories for figures and data exist
-        os.makedirs(fig_dir, exist_ok=True)
-        os.makedirs(data_dir, exist_ok=True)
-
-       # Check if the cache file exists
-        cache_file_path = os.path.join(cache_dir, "fitted_parameters.pkl")
-        if os.path.exists(cache_file_path):
-            # Load parameters after fitting from the .pkl file
-            with open(cache_file_path, "rb") as f:  # 'rb' not 'r'
-                model_parameters = pickle.load(f)
-        else:
-            print(f"Warning: Cache file '{cache_file_path}' does not exist. Skipping.")
-            continue
-        # save connectome based network considering only responsive neurons over all stimulations
-        gamma_g = (Ggap*ggap)[responding][:, responding] 
-        gamma_s = (Gsyn*gsyn)[responding][:, responding]
-        Es = Esyn[responding][:, responding]
-
-        kunert_parameters.update({
-            "gamma_g": gamma_g,
-            "gamma_s": gamma_s,
-            "E_s": Es
-        })
-        print('ds_tags: ', ds_tags[i_folder])
-        if "wt" in ds_tags[i_folder]:
-            gamma_g_connectome_wt.extend(gamma_g[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_connectome_wt.extend(gamma_s[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_g_fitted_wt.extend(model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_fitted_wt.extend(model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
-        elif "unc31" in ds_tags[i_folder]:
-            gamma_g_connectome_unc31.extend(gamma_g[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_connectome_unc31.extend(gamma_s[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_g_fitted_unc31.extend(model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_fitted_unc31.extend(model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
-       
-        
 # Scatter plot gamma_g and gamma_s: connectome vs fitted
 fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 

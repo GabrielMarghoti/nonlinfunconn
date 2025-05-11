@@ -1,7 +1,7 @@
 # Nonlinear Functional Connectivity
 
 ## Overview
-This repository provides implementations for analyzing nonlinear functional connectivity in complex systems. It includes methods for:
+This repository provides implementations for analyzing nonlinear functional connectivity in complex systems by computing the state dependent Nonequilibrium Green Functions given a model. It includes methods for:
 - **Convolution kernel fitting** to model interactions in complex networks based on measured data.
 - **Nonequilibrium Green Functions (NEGF)** for studying signal propagation in nonlinear dynamical models.
 

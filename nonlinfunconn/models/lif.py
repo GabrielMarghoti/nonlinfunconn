@@ -5,9 +5,6 @@ from nonlinfunconn import convolution
 from ..utils.nontt_conv import  nontt_conv
 from ..utils.expandtoarray import expandtoarray
 
-from ..utils import time_level_curves
-import matplotlib as plt
-
 
 class LIF:
     """
@@ -122,19 +119,25 @@ class LIF:
         V_exp = np.expand_dims(V, axis=0)  # Shape (1, N)
         
         # Compute new membrane potential
+                
+        assert np.all(np.isfinite(self.gamma_g)), "NaNs in gamma_g"
+        assert np.all(np.isfinite(self.gamma_s)), "NaNs in gamma_s"
+        assert np.all(np.isfinite(self.gamma)), "NaNs in gamma"
+        assert np.all(np.isfinite(V)), "NaNs in V"
+        assert np.all(np.isfinite(V_exp)), "NaNs in V_exp"
         Y = self.E_c \
             - np.sum((self.gamma_s * S / self.gamma) * (V_exp - self.E_s), axis=1) \
             - np.sum((self.gamma_g / self.gamma) * (V_exp - V[:, None]), axis=1)
         return Y
 
-    def find_eq_self_consistent(self, maxit=100000, damp=1e-3, tol=5e-4):
+    def find_eq_self_consistent(self, maxit=1000, damp=1e-2, tol=1e-2):
         """
         Find equilibrium membrane potentials using an iterative self-consistent method.
 
         Parameters:
         - maxit: Maximum number of iterations (default: 100000).
-        - damp: Initial damping factor for stability (default: 1e-3).
-        - tol: Convergence tolerance (default: 5e-5).
+        - damp: Initial damping factor for stability (default: 1e-2).
+        - tol: Convergence tolerance (default: 1e-2).
 
         Returns:
         - V: 1D NumPy array of equilibrium membrane potentials.
@@ -151,7 +154,9 @@ class LIF:
             
             # Compute new potential with damping factor
             V_new = self.Veq_step(V_old, S_eq)
+            V_new = np.nan_to_num(V_new, nan=0.0, posinf=1e10, neginf=-1e10)
             V = V_old + damp * (V_new - V_old)
+            V = np.nan_to_num(V, nan=0.0, posinf=1e10, neginf=-1e10)
             
             # Check for convergence
             dV = np.linalg.norm(V - V_old, ord=1) / np.linalg.norm(V_old, ord=1)
@@ -237,9 +242,11 @@ class LIF:
         gamma_sum = (self.gamma / self.C) \
             + np.sum((self.gamma_g / self.C[:, None]), axis=1) \
             + np.sum((self.gamma_s / self.C[:, None]) * self.S0, axis=1)
-
+        
         for i in range(self.num_neurons):
-            exp_factor_gs_gg = np.exp(-ts_diff * gamma_sum[i]) 
+            arg = -ts_diff * gamma_sum[i]
+            arg = np.clip(arg, -500, 500)  # Cap the range
+            exp_factor_gs_gg = np.where(ts_diff > 0, np.exp(arg), 0)
 
             for j in range(self.num_neurons):
                 if i == j or (self.gamma_g[i, j] == 0 and self.gamma_s[i, j] == 0):
@@ -256,9 +263,9 @@ class LIF:
                 synaptic_factor = a_r * (1 - self.S0[i, j]) * self.d_synaptic_activation(Veq, beta, Vth)
 
                 # Assign kernels
-                self.sigma0[i, j] = heaviside_func * synaptic_factor * exp_factor_synaptic
-                self.gg0[i, j] = heaviside_func * (self.gamma_g[i, j] / self.C[i]) * exp_factor_gs_gg
-                self.gs0[i, j] = heaviside_func * (self.gamma_s[i, j] / self.C[i]) * (self.E_s[i, j] - self.V0[i]) * exp_factor_gs_gg     
+                self.sigma0[i, j] = synaptic_factor * np.where(heaviside_func > 0, exp_factor_synaptic, 0)
+                self.gg0[i, j] = (self.gamma_g[i, j] / self.C[i]) * np.where(heaviside_func > 0, exp_factor_gs_gg, 0)
+                self.gs0[i, j] = (self.gamma_s[i, j] / self.C[i]) * (self.E_s[i, j] - self.V0[i]) * np.where(heaviside_func > 0,exp_factor_gs_gg  , 0)   
                  
                 self.g0 = self.gg0 + nontt_conv(self.gs0[i, j], self.sigma0[i, j], self.dt)
 

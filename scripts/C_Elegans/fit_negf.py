@@ -546,8 +546,8 @@ for (i_folder, folder) in enumerate(ds_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 3
-            fitting_window = 60
+            lowering_resolution_step = 5
+            fitting_window = 80
 
             print("NEGF fitting")
             min_constrain_dict = {
@@ -578,9 +578,9 @@ for (i_folder, folder) in enumerate(ds_list):
                 dt=lowering_resolution_step * fconn.Dt,
                 fit_linear_model=kwar_fit_lineal_model,
                 target_nodes=np.arange(1, n_responding),  # Exclude index 0 (stimulated neuron)
-                max_iters=120,
+                max_iters=200,
                 constrain=(min_constrain_dict, max_constrain_dict),
-                rms_tol=1e-2,
+                rms_tol=1e-3,
                 parameter_to_fit_list=['C', 'gamma', 'E_c', 'gamma_g', 'gamma_s', 'E_s'],
                 #loss_method='correlation'
             )

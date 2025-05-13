@@ -8,10 +8,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-import matplotlib.cm as cm
-import os, sys, time, json
+import os, sys
 import pickle # for cache saving/loading
+import gc
 
 import nonlinfunconn as nlfc # for non-linear kernels
 from nonlinfunconn.models.lif import LIF
@@ -59,7 +58,7 @@ distances_total = []
 
 worms_datasets_paths_list = [os.path.join(worm_type_path, folder) for folder in os.listdir(worm_type_path) if os.path.isdir(os.path.join(worm_type_path, folder))]
 
-# Iterate over the folders whcih contains each experiment data
+# Iterate over the folders which contains each experiment data
 for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
     print("Processing dataset", worm_idx, ":", worm_dataset_path)     
@@ -69,7 +68,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
     for (stim_idx, stim_neu_path) in enumerate(stimulated_neuron_paths_list):
 
         try:
-            print(" Processing trial (stimulus)", stim_idx, ":", stim_neu_path)     
+            print(" Processing specific stimulated neuron at ", stim_neu_path)     
 
             with open(os.path.join(stim_neu_path, 'processed_data.pkl'), 'rb') as f:
                 loaded_data = pickle.load(f)
@@ -86,6 +85,9 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             time_plt           = loaded_data["time_plt"]
             dt                 = loaded_data["dt"]
             stim_begin_idx     = loaded_data["stim_begin_idx"]
+
+            # Close the loaded data file
+            f.close()
 
             n_stimuli, n_neurons, time_len = signal_smooth.shape
 
@@ -123,16 +125,16 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             responding_neurons_labels = np.array(neuron_labels)[responding_neurons]  # Create an array of labels for responding_neurons indexes
             labeled_neurons = [label != "" for label in responding_neurons_labels]  # Create a boolean list for non-empty labels
 
-
             n_responding_neurons_labeled = len(np.array(responding_neurons)[labeled_neurons])
 
-            if n_responding_neurons_labeled > 15 or n_responding_neurons_labeled < 2:
+            if n_responding_neurons_labeled > 10 or n_responding_neurons_labeled < 2:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons_labeled} labeled responding neurons.")
                 continue
             
-            if n_responding_neurons > 15 or n_responding_neurons < 4:
+            if n_responding_neurons > 10 or n_responding_neurons < 3:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons} responding neurons.")
                 continue
+
 
             if only_labeled_neurons:
                 if any(label == '' for label in np.array(neuron_labels)[responding_neurons]):
@@ -256,7 +258,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 10
+            lowering_resolution_step = 5
             fitting_window = 80
 
             print("NEGF fitting")
@@ -287,12 +289,13 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 x=signal_smooth[:, responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
                 dt=lowering_resolution_step * dt,
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
-                max_iters=20,
+                max_iters=400,
                 constrain=(min_constrain_dict, max_constrain_dict),
-                rms_tol=1e-3,
-                parameter_to_fit_list=['C', 'gamma', 'E_c', 'gamma_g', 'gamma_s', 'E_s'],
-                #loss_method='correlation'
+                rms_tol=1e-4,
+                parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'a_r', 'a_d', 'beta'],
+                loss_method='correlation'
             )
+
             # Compute green functions using the higher time resolution, but the fitted parameters
             lif_gf = nlfc.GreenFunctions(
                 model = LIF(n_responding_neurons, fitted_parameters),
@@ -499,7 +502,8 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 pickle.dump(fitted_parameters, f)
 
             plt.close('all')
-        
+            
+            gc.collect()
             pass
         except Exception as e:
             print(f"Error processing dataset {stim_neu_path}: {e}")
@@ -515,7 +519,7 @@ D = 10 # mm²/s
 # Filter out None or NaN values from distances and corresponding gamma_g_values
 valid_indices = ~np.isnan(distances_total)
 
-distances = distances_total[valid_indices]
+distances = np.array(distances_total)[valid_indices]
 
 
 distances_squared = [d**2 for d in distances]

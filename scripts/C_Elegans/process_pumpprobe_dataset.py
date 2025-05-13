@@ -31,7 +31,7 @@ matchless_nan_th_from_file = "--matchless-nan-th-from-file" in sys.argv
 matchless_nan_th_added_only = "--matchless-nan-th-added-only" in sys.argv
 merge = "--no-merge" not in sys.argv
 ds_exclude_tags =  None
-
+skip_processed = "--skip-processed" in sys.argv
 
 for arg in sys.argv:
     _arg = arg.split(":")
@@ -351,6 +351,8 @@ for (i_folder, folder) in enumerate(ds_list):
                 worm_type = 'unc31'
             #  Set output directories
             data_dir = data_folder + f"worm_type_{worm_type}/" + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}/"
+
+            if os.path.exists(os.path.join(data_dir, "processed_data.pkl")) and skip_processed: continue
 
             ie_dir_list = []
 

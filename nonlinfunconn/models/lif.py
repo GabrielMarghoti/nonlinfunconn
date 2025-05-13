@@ -257,7 +257,7 @@ class LIF:
                 Veq, Vth = self.V0[j], self.Vth[i, j]
 
                 # Synaptic exponential kernel
-                exp_factor_synaptic = np.exp(-ts_diff * (a_d - a_r / (1 + np.exp(-beta * (Veq - Vth)))))
+                exp_factor_synaptic = np.where(heaviside_func > 0,np.exp(-ts_diff * (a_d - a_r / (1 + np.exp(-beta * (Veq - Vth))))), 0)
 
                 # Synaptic kernel amplitude
                 synaptic_factor = a_r * (1 - self.S0[i, j]) * self.d_synaptic_activation(Veq, beta, Vth)

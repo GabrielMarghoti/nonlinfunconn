@@ -271,13 +271,23 @@ class GreenFunctions:
         v_dict = {k: np.zeros_like(v) for k, v in p.items()}
 
         def correlation_loss(y_pred, y_true):
+            """
+            Compute the correlation loss between predicted and true values.
+
+            Parameters:
+            - y_pred: np.ndarray, predicted values with shape (n_nodes, time_len).
+            - y_true: np.ndarray, true values with shape (n_nodes, time_len).
+
+            Returns:
+            - float: Correlation loss value.
+            """
             vx = y_pred - np.mean(y_pred, axis=1, keepdims=True)
             vy = y_true - np.mean(y_true, axis=1, keepdims=True)
 
             numerator = np.sum(vx * vy, axis=1)
             denominator = np.sqrt(np.sum(vx ** 2, axis=1)) * np.sqrt(np.sum(vy ** 2, axis=1))
             
-            corr = numerator / (denominator + 1e-8)  # Add epsilon to avoid div by 0
+            corr = numerator / (denominator + 1e-8)  # Add epsilon to avoid division by zero
             return 1 - np.mean(corr)  # Average over nodes
         
         def loss(variant_self, p, X, Y):
@@ -358,6 +368,10 @@ class GreenFunctions:
             if t % 10 == 0 or t == 1:
                 print(f"Iteration {t}, Loss: {current_loss:.6f}")
 
+            if not isinstance(current_loss, float) or np.isnan(current_loss) or np.isinf(current_loss): 
+                print("Loss is not a valid float (NaN, infinite, or invalid type). Stopping optimization.")
+                break
+
             if auto_stop and abs(prev_loss - current_loss) < rms_tol:
                 print(f"Early stopping at iteration {t}. Loss improvement < {rms_tol}")
                 break
@@ -376,95 +390,3 @@ class GreenFunctions:
         return  self.model_instance.parameters
 
 
-
-
-
-    def fit_p_array(
-        self,
-        Y: np.ndarray,
-        dt=None,
-        fit_linear_model: bool = False,
-        fit_param=None,
-        n_neigh_max: int = 2,
-        rms_limits: Optional[Tuple[int, int]] = None,
-        auto_stop: bool = True,
-        rms_tol: float = 1e-3,
-        max_iters: int = 1000,
-        learning_rate: float = 1e-2,
-        beta1: float = 0.9,
-        beta2: float = 0.999,
-        eps: float = 1e-8,
-        p0: Optional[np.ndarray] = None,
-    ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
-        """
-        Fit the model using Adam gradient descent.
-        """
-
-        n_trials, time_len, n_neurons = Y.shape
-        if dt is not None:
-            self.dt = dt
-        else:
-            raise ValueError("Time step (dt) must be provided.")
-
-        # Initialize parameters
-        p0 = self.get_parameters_array() if p0 is None else p0
-        p = p0.copy()
-        m = np.zeros_like(p)
-        v = np.zeros_like(p)
-
-        def loss(p, X, Y):
-            Y_pred = np.zeros_like(Y)
-            err = 0.0
-            for trial_idx in range(X.shape[0]):
-                if fit_linear_model:
-                    g0 = self.model_instance.compute_direct_equilibrium_green_functions(
-                        time_len=time_len, dt=self.dt, p=p
-                    )
-                    est_V = np.zeros_like(Y[trial_idx])
-                    for i in range(n_neurons):
-                        est_V[i] += Y[trial_idx, i, 0]
-                        for j in range(n_neurons):
-                            est_V[i] += nontt_conv(g0[i, j], Y[trial_idx, j] - Y[trial_idx, j, 0], self.dt)
-                    Y_pred[trial_idx] = est_V
-                else:
-                    _, Y_pred[trial_idx] = self.model_instance.compute_direct_green_functions(
-                        Y[trial_idx], dt=self.dt, p=p, return_estimated_V=True
-                    )
-                err += np.sqrt(np.sum((Y_pred[trial_idx] - Y[trial_idx]) ** 2))
-            return err / (n_trials * time_len * n_neurons)
-
-        def compute_grad(p, X, Y, epsilon=1e-3):
-            grad = np.zeros_like(p)
-            loss_0 = loss(p, X, Y)
-            for i in range(len(p)):
-                p_eps = p.copy()
-                p_eps[i] += epsilon
-                loss_eps = loss(p_eps, X, Y)
-                grad[i] = (loss_eps - loss_0) / epsilon
-            return grad
-
-        prev_loss = float("inf")
-        for t in range(1, max_iters + 1):
-            grad = compute_grad(p, Y, Y)
-
-            m = beta1 * m + (1 - beta1) * grad
-            v = beta2 * v + (1 - beta2) * (grad ** 2)
-
-            m_hat = m / (1 - beta1 ** t)
-            v_hat = v / (1 - beta2 ** t)
-
-            p -= learning_rate * m_hat / (np.sqrt(v_hat) + eps)
-
-            current_loss = loss(p, Y, Y)
-            if t % 10 == 0 or t == 1:
-                print(f"Iteration {t}, Loss: {current_loss:.6f}")
-
-            if auto_stop and abs(prev_loss - current_loss) < rms_tol:
-                print(f"Early stopping at iteration {t}. Loss improvement < {rms_tol}")
-                break
-            prev_loss = current_loss
-
-        # Update model parameters
-        self.set_parameters(p)
-
-        return p, None, None

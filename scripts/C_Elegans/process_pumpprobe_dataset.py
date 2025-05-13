@@ -33,25 +33,36 @@ merge = "--no-merge" not in sys.argv
 ds_exclude_tags =  None
 skip_processed = "--skip-processed" in sys.argv
 
+worm_type = 'all'
+data_path = None
+figures_path = None
+
 for arg in sys.argv:
     _arg = arg.split(":")
+    
     if _arg[0] == "--worm-type": 
         worm_type = str(_arg[1])
-    if _arg[0] == "--data-path":
+    elif _arg[0] == "--data-path":
         data_path = _arg[1]
-    if _arg[0] == "--figures-path":
+    elif _arg[0] == "--figures-path":
         figures_path = _arg[1]
+
+if data_path:
+    data_folder = data_path
+if figures_path:
+    figures_folder = figures_path
 
 aconn_ds_i = None # default is loading from funatlas, if aconn_ds_i is set, it will load from the specified dataset
 # default 
 figures_folder = "figures/C_elegans_pumpprobre_exp/"
-data_folder = "data/C_elegans_pumpprobre_exp/"
+data_folder = "data/C_elegans_pumpprobre_exp/"#
 
 ds_list_path = (
-    "/home/gabrielm/paper_reproduction/ds_list_unc31.txt" if "--unc31" in sys.argv 
-    else "/home/gabrielm/paper_reproduction/ds_list_wt.txt" if "--wt" in sys.argv 
-    else "/home/gabrielm/paper_reproduction/ds_list_reduced.txt"#"/home/gabrielm/paper_reproduction/ds_list_full.txt"
+    "/home/gabrielm/paper_reproduction/ds_list_unc31.txt" if worm_type == "unc31"
+    else "/home/gabrielm/paper_reproduction/ds_list_wt.txt" if worm_type == "wt"
+    else "/home/gabrielm/paper_reproduction/ds_list_full.txt"
 )
+
 ds_list_spont_path = "/home/gabrielm/paper_reproduction/ds_list_ctrl_wt.txt"
 
 
@@ -161,6 +172,7 @@ def load_ds_list(fname,tags=None,exclude_tags=None,return_tags=False):
 
 
 ds_list, ds_tags = load_ds_list(ds_list_path, return_tags=True)
+
 ds_list_spont, ds_spont_tags = load_ds_list(ds_list_spont_path, return_tags=True)
 
 # get connectome from pp.Funatlas class
@@ -276,7 +288,7 @@ print(f"kunert_ODE_parameters saved to {kunert_ODE_parameters_file_path}")
 
 # Iterate over the folders whcih contains each experiment data
 for (i_folder, folder) in enumerate(ds_list):
-
+    
     # Create functional connectome
     fconn = pp.Fconn.from_file(folder)
     #shift_vol = fconn.shift_vol
@@ -343,14 +355,8 @@ for (i_folder, folder) in enumerate(ds_list):
             time_fit = np.arange(time_plt_len- shift_vol) * fconn.Dt  
             time_fit_len = len(time_fit)
 
-
-            worm_type = ds_tags[i_folder][1]
-            if 'wt' in ds_tags[i_folder]:
-                worm_type = 'wt'
-            elif 'unc31' in ds_tags[i_folder]:
-                worm_type = 'unc31'
             #  Set output directories
-            data_dir = data_folder + f"worm_type_{worm_type}/" + "_".join(ds_tags[i_folder]) + f"/stim_neu_{stim_neuron_label}/"
+            data_dir = data_folder + f"worm_type_{worm_type}/{ds_tags[i_folder][0]}" + f"/stim_neu_{stim_neuron_label}/"
 
             if os.path.exists(os.path.join(data_dir, "processed_data.pkl")) and skip_processed: continue
 
@@ -395,7 +401,7 @@ for (i_folder, folder) in enumerate(ds_list):
             
             n_responding = len(responding)
 
-            if n_responding > 20 or n_responding < 4:
+            if n_responding > 30 or n_responding < 2:
                 continue       
 
             positions = np.array(positions)
@@ -425,6 +431,7 @@ for (i_folder, folder) in enumerate(ds_list):
             with open(pickle_file_path, "wb") as f:
                 pickle.dump(data_dict, f)
             print(f"Data dictionary saved to {pickle_file_path}")
+            f.close()
 
             lin_kernel = np.zeros((len(responding), time_fit_len))
             fit_y = np.zeros((len(responding), time_fit_len))
@@ -493,7 +500,7 @@ for (i_folder, folder) in enumerate(ds_list):
             lin_kernel_file_path = os.path.join(data_dir, f"lin_kernels_fit_responding_neurons.pkl")
             with open(lin_kernel_file_path, "wb") as f:
                 pickle.dump(lin_kernel_data, f)
-
+            f.close()
             print(f"Linear kernel data saved to {lin_kernel_file_path}")
 
             # Clear variables to free memory

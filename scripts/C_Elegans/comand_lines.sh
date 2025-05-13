@@ -2,13 +2,15 @@
 # fit exp kernels and NEGF, compare the final correlation with observed spontaneous activity
 
 # process the raw pumpprobe data to .pkl datasets which does not require the pumpprobe package
-python3 scripts/C_Elegans/process_pumpprobe_dataset.py  --folder:figures --signal:green --no-merge --skip-processed --wt
-python3 scripts/C_Elegans/process_pumpprobe_dataset.py  --folder:figures --signal:green --no-merge  --skip-processed --unc31
+python3 scripts/C_Elegans/process_pumpprobe_dataset.py  --signal:green --no-merge  --worm-type:wt   --skip-processed
+python3 scripts/C_Elegans/process_pumpprobe_dataset.py  --signal:green --no-merge  --worm-type:unc31   --skip-processed
 
 # fit negf and save the fitted parameters, from wt or unc31 worm types, --load-cache looks for previously fitted parameters 
 python3 scripts/C_Elegans/fit_negf_from_processed_data.py  --load-cache --worm-type:wt
 python3 scripts/C_Elegans/fit_negf_from_processed_data.py  --load-cache --worm-type:unc31
 
+
+python3 scripts/C_Elegans/corr_gammas.py 
 
 
 ######################## OLD ############################

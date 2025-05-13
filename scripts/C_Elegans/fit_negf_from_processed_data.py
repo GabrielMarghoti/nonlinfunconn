@@ -127,11 +127,11 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             n_responding_neurons_labeled = len(np.array(responding_neurons)[labeled_neurons])
 
-            if n_responding_neurons_labeled > 10 or n_responding_neurons_labeled < 2:
+            if n_responding_neurons_labeled > 10 or n_responding_neurons_labeled < 3:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons_labeled} labeled responding neurons.")
                 continue
             
-            if n_responding_neurons > 10 or n_responding_neurons < 3:
+            if n_responding_neurons > 10 or n_responding_neurons < 4:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons} responding neurons.")
                 continue
 
@@ -156,20 +156,25 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             most_variable_neuron_idx = np.argmax(trial_variations)
             most_variable_neuron = responding_neurons[most_variable_neuron_idx] 
 
-            if np.mean(responses_correlations[0]) < 0.6:
+            if np.mean(responses_correlations[0]) < 0.5:
                 print(f"   Skipping dataset {stim_neu_path} with low stimuli correlations.")
                 continue
             
             # Responding neurons positions
             responding_positions = neuron_positions[responding_neurons]
-
+            responding_positions = np.array(responding_positions, dtype=np.float64)  # Ensure numeric type
+            
             # Handle cases where positions are None or invalid
-            valid_positions_mask = ~np.any(np.isnan(responding_positions), axis=1)
+            valid_positions_mask = ~np.isnan(responding_positions[:,0])
             valid_positions = responding_positions[valid_positions_mask]
+
+            # Ensure valid_positions is not empty
+            if valid_positions.size == 0:
+                raise ValueError("No valid positions found for responding neurons.")
 
             # Initialize distance matrix with NaN values
             distance_matrix_responding_neurons = np.full((len(responding_positions), len(responding_positions)), np.nan)
-
+            
             # Compute distances only for valid positions
             valid_distance_matrix = np.linalg.norm(
                 valid_positions[:, np.newaxis, :] - valid_positions[np.newaxis, :, :], axis=-1
@@ -207,7 +212,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             if load_cache:
                 # Check if the cache file exists
                 cache_file_path = os.path.join(output_data_dir, "fitted_parameters.pkl")
-                old_cache_file_path = os.path.join( "data/C_elegans_pumpprobre_exp/" + os.path.relpath(worm_dataset_path, worm_type_path) + f"/stim_neu_{stim_neuron_label}_{n_stimuli}x/fit_negf_consider_not_labeled_neurons", "fitted_parameters.pkl")
+                old_cache_file_path = os.path.join( "data/C_elegans_pumpprobre_exp/" + os.path.relpath(worm_dataset_path, worm_type_path) + f'_{worm_type}' + f"/stim_neu_{stim_neuron_label}_{n_stimuli}x/fit_negf_consider_not_labeled_neurons", "fitted_parameters.pkl")
                 
                 if os.path.exists(cache_file_path):
                     # Load parameters after fitting from the .pkl file
@@ -218,7 +223,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                     with open(old_cache_file_path, "rb") as f:  
                         fitted_parameters = pickle.load(f)
                     model_parameters.update(fitted_parameters)
-                    print('Found cache in old directory')
+                    print('!Found cache in old directory!')
 
                 else:
                     print(f"Warning: Cache file '{cache_file_path}' does not exist. Proceeding without loading cached parameters.")
@@ -258,7 +263,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 5
+            lowering_resolution_step = 10
             fitting_window = 80
 
             print("NEGF fitting")
@@ -291,9 +296,9 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
                 max_iters=400,
                 constrain=(min_constrain_dict, max_constrain_dict),
-                rms_tol=1e-4,
+                rms_tol=1e-2,
                 parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'a_r', 'a_d', 'beta'],
-                loss_method='correlation'
+                #loss_method='correlation'
             )
 
             # Compute green functions using the higher time resolution, but the fitted parameters
@@ -487,9 +492,9 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             plt.savefig(os.path.join(output_figure_dir, "gamma_vs_distance_scatter.png"), bbox_inches="tight")
             plt.close(fig)
 
-            gamma_g_total.extend(fitted_parameters["gamma_g"].flatten())
-            gamma_s_total.extend(fitted_parameters["gamma_s"].flatten())
-            distances_total.extend(distances.flatten())
+            gamma_g_total.extend(gamma_g_values[valid_indices].flatten())
+            gamma_s_total.extend(gamma_s_values[valid_indices].flatten())
+            distances_total.extend(distances[valid_indices].flatten())
 
             # Save parameters after fitting as a tab-delimited text file
             with open(os.path.join(output_data_dir, "fitted_parameters.txt"), "w") as f:
@@ -516,16 +521,13 @@ fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 # Flatten the matrices for scatter plotting
 D = 10 # mm²/s
 
-# Filter out None or NaN values from distances and corresponding gamma_g_values
-valid_indices = ~np.isnan(distances_total)
+distances = np.array(distances_total)
+gamma_g_values = np.array(gamma_g_total)
+gamma_s_values = np.array(gamma_s_total)
 
-distances = np.array(distances_total)[valid_indices]
-
-
-distances_squared = [d**2 for d in distances]
-distances_exp_squared = [np.exp(-d**2)/(4*D) for d in distances]
-gamma_g_values = gamma_g_total[valid_indices]
-gamma_s_values = gamma_s_total[valid_indices]
+# Now it's safe to compute values
+distances_squared = distances**2
+distances_exp_squared = np.exp(-distances_squared) / (4 * D)
 
 
 # Plot gamma_g vs distance
@@ -546,12 +548,12 @@ ax[1].set_title("coupling vs exp(-Distance^2/(4D))")
 ax[1].grid(True)
 
 coupling_vs_distance_file_name = (
-    "gamma_vs_distance_scatter_all_trials_unc_31.png" if "--unc31" in sys.argv 
-    else "gamma_vs_distance_scatter_all_trials_wt.png" if "--wt" in sys.argv 
-    else "gamma_vs_distance_scatter_all_trials_all.png"
+    "gamma_vs_distance_scatter_unc_31.png" if worm_type == "unc31" 
+    else "gamma_vs_distance_scatter_wt.png" if worm_type == "wt"
+    else "gamma_vs_distance_scatter_all.png"
 )
 
 # Adjust layout and save the figure
 plt.tight_layout()
-plt.savefig(os.path.join(output_figure_dir, coupling_vs_distance_file_name), bbox_inches="tight")
+plt.savefig(os.path.join(figures_path, coupling_vs_distance_file_name), bbox_inches="tight")
 plt.close(fig)

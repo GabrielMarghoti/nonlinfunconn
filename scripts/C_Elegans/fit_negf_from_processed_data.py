@@ -231,6 +231,11 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                     model_parameters["gamma_s"] = resp_gamma_s
                     model_parameters["Es"] = resp_Es
 
+            if model_parameters["gamma_g"].shape[0] != n_responding_neurons:
+                model_parameters["gamma_g"] = resp_gamma_g
+                model_parameters["gamma_s"] = resp_gamma_s
+                model_parameters["Es"] = resp_Es
+
             Y_nonlin_fit = np.zeros_like(signal_smooth[:, responding_neurons, stim_begin_idx:])
 
             G_degree = 2

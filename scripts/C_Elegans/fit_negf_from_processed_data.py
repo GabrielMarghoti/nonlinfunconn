@@ -275,8 +275,8 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                             "a_d": 0.0,  
                             "gamma_g": 0.0,
                             "gamma_s": 0.0,
-                            "E_s": -120,
-                            "E_c": -120,  
+                            "E_s": -12000,  # the data is not mV so such parameters might have another dimension
+                            "E_c": -12000,  
                             }
             max_constrain_dict = {
                             "C": np.inf,          
@@ -286,8 +286,8 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                             "a_d": np.inf,  
                             "gamma_g": np.inf,
                             "gamma_s": np.inf,
-                            "E_s": 100,
-                            "E_c": 100,  
+                            "E_s": 10000,
+                            "E_c": 10000,  
                             }
 
             fitted_parameters = lif_gf.ADAM_fit(
@@ -296,7 +296,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
                 max_iters=400,
                 constrain=(min_constrain_dict, max_constrain_dict),
-                rms_tol=1e-2,
+                rms_tol=1e-4,
                 parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'a_r', 'a_d', 'beta'],
                 #loss_method='correlation'
             )
@@ -501,10 +501,13 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 f.write("Parameter\tValue\n")
                 for key, value in fitted_parameters.items():
                     f.write(f"{key}\t{value}\n")
+            f.close()
 
             # Save parameters after fitting in a JSON format for easier loading
             with open(os.path.join(output_data_dir, "fitted_parameters.pkl"), "wb") as f:
                 pickle.dump(fitted_parameters, f)
+            
+            f.close()
 
             plt.close('all')
             

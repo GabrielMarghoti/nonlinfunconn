@@ -194,17 +194,6 @@ for (worm_idx, worm_dataset_path) in enumerate(wt_unc31_worms_datasets_paths_lis
             print(f"Warning: Cache file '{cache_file_path}' does not exist. Proceedingto next dataset.")
             continue
 
-
-        if worm_type == "wt":
-            gamma_g_connectome_wt.extend(resp_gamma_g[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_connectome_wt.extend(resp_gamma_s[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_g_fitted_wt.extend(fitted_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_fitted_wt.extend(fitted_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
-        elif worm_type == "unc31":
-            gamma_g_connectome_unc31.extend(resp_gamma_g[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_connectome_unc31.extend(resp_gamma_s[labeled_neurons][:, labeled_neurons].flatten())
-            gamma_g_fitted_unc31.extend(fitted_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
-            gamma_s_fitted_unc31.extend(fitted_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
     
 
         # Compute green functions using the higher time resolution, but the fitted parameters
@@ -231,11 +220,19 @@ for (worm_idx, worm_dataset_path) in enumerate(wt_unc31_worms_datasets_paths_lis
                     Y_nonlin_fit[ie_idx, i]
                 )[0, 1]
                 
-                
-        if worm_type == "wt":
-            signal_correlation_wt.extend(signal_correlation.flatten())
-        elif worm_type == "unc31":
-            signal_correlation_unc31.extend(signal_correlation.flatten())
+        if np.nanmean(signal_correlation)>0.3: # consider fitted data-model which has consistent prediction
+            if worm_type == "wt":
+                signal_correlation_wt.extend(signal_correlation.flatten())
+                gamma_g_connectome_wt.extend(resp_gamma_g[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_connectome_wt.extend(resp_gamma_s[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_g_fitted_wt.extend(fitted_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_fitted_wt.extend(fitted_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
+            elif worm_type == "unc31":
+                signal_correlation_unc31.extend(signal_correlation.flatten())
+                gamma_g_connectome_unc31.extend(resp_gamma_g[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_connectome_unc31.extend(resp_gamma_s[labeled_neurons][:, labeled_neurons].flatten())
+                gamma_g_fitted_unc31.extend(fitted_parameters["gamma_g"][labeled_neurons][:, labeled_neurons].flatten())
+                gamma_s_fitted_unc31.extend(fitted_parameters["gamma_s"][labeled_neurons][:, labeled_neurons].flatten())
 
         #    pass
         #except Exception as e:

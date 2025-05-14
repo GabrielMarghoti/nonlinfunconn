@@ -41,7 +41,7 @@ class LIF:
             "gamma_s": 100,  # Synaptic decay for chemical synapses [pS]
             "gamma": 10,     # Membrane potential decay rate  [pS]
             "beta": 0.125,   # Inverse synaptic timescale   [mV^-1]
-            "Vth": None,     # Threshold potential for spiking
+            "Vth": None,     # Threshold potential for synapse activation, middle of sigmoig function
             "E_c": -60.0,    # Equilibrium membrane potential [mV]
             "E_s": 0.0,      # Synaptic reversal potential (default value is excitatory)
             "a_r": 1.0,      # Synaptic rise time constant

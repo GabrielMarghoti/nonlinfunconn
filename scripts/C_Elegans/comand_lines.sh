@@ -13,6 +13,11 @@ python3 scripts/C_Elegans/fit_negf_from_processed_data.py  --load-cache --worm-t
 python3 scripts/C_Elegans/corr_gammas.py 
 
 
+
+# For fitting of a specific dataset (maybe to focus on high resolution fitting)
+python3 scripts/C_Elegans/fit_negf_from_processed_data_single_file.py  --load-cache --dataset-path:/home/gabrielm/projects/nonlinfunconn-main/data/C_elegans_pumpprobre_exp/worm_type_unc31/20220113_101730/stim_neu_AVDR/
+
+
 ######################## OLD ############################
 
 # Unc31 worms, without wirelless connections. fit exp kernels and NEGF, compare the predicted signals with observed activity

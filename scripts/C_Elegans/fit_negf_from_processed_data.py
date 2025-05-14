@@ -268,7 +268,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 5
+            lowering_resolution_step = 6
             fitting_window = 80
 
             print("NEGF fitting")
@@ -276,8 +276,6 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                             "C": 0.0,          
                             "gamma": 0.0,  
                             "beta": 0.0, 
-                            "a_r": 0.0,  
-                            "a_d": 0.0,  
                             "gamma_g": 0.0,
                             "gamma_s": 0.0,
                             "E_s": -12000,  # the data is not mV so such parameters might have another dimension
@@ -287,8 +285,6 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                             "C": np.inf,          
                             "gamma": np.inf,  
                             "beta": np.inf, 
-                            "a_r": np.inf,  
-                            "a_d": np.inf,  
                             "gamma_g": np.inf,
                             "gamma_s": np.inf,
                             "E_s": 10000,
@@ -299,10 +295,10 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 x=signal_smooth[:, responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
                 dt=lowering_resolution_step * dt,
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
-                max_iters=400,
+                max_iters=500,
                 constrain=(min_constrain_dict, max_constrain_dict),
                 rms_tol=1e-2,
-                parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'a_r', 'a_d', 'beta'],
+                parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
                 #loss_method='correlation'
             )
 
@@ -313,7 +309,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 dt = dt,
             )
             print('FITTING DONE')
-            
+
             # Save parameters after fitting as a tab-delimited text file
             with open(os.path.join(output_data_dir, "fitted_parameters.txt"), "w") as f:
                 f.write("Parameter\tValue\n")

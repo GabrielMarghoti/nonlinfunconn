@@ -370,7 +370,16 @@ class GreenFunctions:
 
             if not isinstance(current_loss, float) or np.isnan(current_loss) or np.isinf(current_loss): 
                 print("Loss is not a valid float (NaN, infinite, or invalid type). Stopping optimization.")
-                break
+                
+                self.model_instance.parameters.update(p)
+                # Update Green's functions
+                self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt, p=p)
+
+                self.g = np.array(Parallel(n_jobs=-1)(
+                    delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt, p=p) for trial_idx in range(self.n_trials)
+                ))
+                return  self.model_instance.parameters
+
 
             if auto_stop and abs(prev_loss - current_loss) < rms_tol:
                 print(f"Early stopping at iteration {t}. Loss improvement < {rms_tol}")

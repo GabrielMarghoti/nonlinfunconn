@@ -268,7 +268,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 10
+            lowering_resolution_step = 5
             fitting_window = 80
 
             print("NEGF fitting")
@@ -301,7 +301,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
                 max_iters=400,
                 constrain=(min_constrain_dict, max_constrain_dict),
-                rms_tol=1e-4,
+                rms_tol=1e-2,
                 parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'a_r', 'a_d', 'beta'],
                 #loss_method='correlation'
             )
@@ -313,6 +313,19 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 dt = dt,
             )
             print('FITTING DONE')
+            
+            # Save parameters after fitting as a tab-delimited text file
+            with open(os.path.join(output_data_dir, "fitted_parameters.txt"), "w") as f:
+                f.write("Parameter\tValue\n")
+                for key, value in fitted_parameters.items():
+                    f.write(f"{key}\t{value}\n")
+            f.close()
+
+            # Save parameters after fitting in a JSON format for easier loading
+            with open(os.path.join(output_data_dir, "fitted_parameters.pkl"), "wb") as f:
+                pickle.dump(fitted_parameters, f)
+            
+            f.close()
 
             #########################################################################################################################################################
             
@@ -501,18 +514,6 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             gamma_s_total.extend(gamma_s_values[valid_indices].flatten())
             distances_total.extend(distances[valid_indices].flatten())
 
-            # Save parameters after fitting as a tab-delimited text file
-            with open(os.path.join(output_data_dir, "fitted_parameters.txt"), "w") as f:
-                f.write("Parameter\tValue\n")
-                for key, value in fitted_parameters.items():
-                    f.write(f"{key}\t{value}\n")
-            f.close()
-
-            # Save parameters after fitting in a JSON format for easier loading
-            with open(os.path.join(output_data_dir, "fitted_parameters.pkl"), "wb") as f:
-                pickle.dump(fitted_parameters, f)
-            
-            f.close()
 
             plt.close('all')
             

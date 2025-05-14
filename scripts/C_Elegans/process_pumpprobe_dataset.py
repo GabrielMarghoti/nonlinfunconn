@@ -358,7 +358,7 @@ for (i_folder, folder) in enumerate(ds_list):
             #  Set output directories
             data_dir = data_folder + f"worm_type_{worm_type}/{ds_tags[i_folder][0]}" + f"/stim_neu_{stim_neuron_label}/"
 
-            if os.path.exists(os.path.join(data_dir, "processed_data.pkl")) and skip_processed: continue
+            if os.path.exists(os.path.join(data_dir, "processed_data.pkl")) and os.path.exists(os.path.join(data_dir, "lin_kernels_fit_responding_neurons.pkl")) and skip_processed: continue
 
             ie_dir_list = []
 
@@ -401,7 +401,7 @@ for (i_folder, folder) in enumerate(ds_list):
             
             n_responding = len(responding)
 
-            if n_responding > 30 or n_responding < 2:
+            if n_responding > 20 or n_responding < 2:
                 continue       
 
             positions = np.array(positions)

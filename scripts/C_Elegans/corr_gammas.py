@@ -220,7 +220,7 @@ for (worm_idx, worm_dataset_path) in enumerate(wt_unc31_worms_datasets_paths_lis
                     Y_nonlin_fit[ie_idx, i]
                 )[0, 1]
                 
-        if np.nanmean(signal_correlation)>0.3: # consider fitted data-model which has consistent prediction
+        if np.nanmean(signal_correlation)>0.2: # consider fitted data-model which has consistent prediction
             if worm_type == "wt":
                 signal_correlation_wt.extend(signal_correlation.flatten())
                 gamma_g_connectome_wt.extend(resp_gamma_g[labeled_neurons][:, labeled_neurons].flatten())

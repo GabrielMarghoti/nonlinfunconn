@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import os, sys
 import pickle # for cache saving/loading
 import gc
+import numpy as np
+from oasis.functions import deconvolve
 
 import nonlinfunconn as nlfc # for non-linear kernels
 from nonlinfunconn.models.lif import LIF
@@ -31,12 +33,45 @@ for arg in sys.argv:
     if _arg[0] == "--figures-path":
         figures_path = _arg[1]
         
+
+
+
+
+def estimate_vm_from_calcium(F, tau_m=1, dt=1, R=1.0, E_c=0.0, threshold=None):
+    """
+    Estimate membrane potential from calcium trace using OASIS deconvolution + LIF model with equilibrium.
+
+    Parameters:
+    - F (np.array): 1D calcium signal
+    - tau_m (float): Membrane time constant (s)
+    - dt (float): Time step (s)
+    - R (float): Input resistance (scaling factor for input current)
+    - E_c (float): Equilibrium (resting) membrane potential
+    - threshold (float or None): Threshold for spiking (optional)
+    - reset (float): Reset potential after spiking (if threshold used)
+
+    Returns:
+    - vm (np.array): Estimated membrane potential over time
+    - s (np.array): Inferred spike train from calcium
+    """
+    _, s, _, _, _ = deconvolve(F)
+
+    vm = np.full_like(s, fill_value=E_c, dtype=float)  # Start from E_c
+    alpha = np.exp(-dt / tau_m)
+
+    for t in range(1, len(s)):
+        vm[t] = alpha * vm[t - 1] + (1 - alpha) * E_c + R * s[t]
+        if threshold is not None and vm[t] >= threshold:
+            vm[t] = E_c
+
+    return vm, s
+
 # Load the kunert_ODE_parameters dictionary from a pickled file
 kunert_ODE_parameters_file_path = os.path.join(data_path, "kunert_ODE_parameters.pkl")
 with open(kunert_ODE_parameters_file_path, "rb") as f:
     kunert_ODE_parameters = pickle.load(f)
 
-kunert_ODE_parameters['C'] = kunert_ODE_parameters['C']*200 # Helps the fitting to find best C, which converts the membrane potential to  the actual signal proportional to the model V, effectivelly a proportional constant that multiplies the capacitance
+kunert_ODE_parameters['C'] = kunert_ODE_parameters['C']*100 # Helps the fitting to find best C, which converts the membrane potential to  the actual signal proportional to the model V, effectivelly a proportional constant that multiplies the capacitance
 
 print(f"ODE model parameters loaded from {kunert_ODE_parameters_file_path}")
 
@@ -63,8 +98,18 @@ stim_begin_idx     = loaded_data["stim_begin_idx"]
 # Close the loaded data file
 f.close()
 
+F = signal_smooth.copy()
+
 n_stimuli, n_neurons, time_len = signal_smooth.shape
 
+s = np.zeros_like(signal_smooth)
+
+for ie in range(n_stimuli):
+    for i in range(n_neurons):
+        signal_smooth[ie, i], s[ie, i] = estimate_vm_from_calcium(F[ie, i], dt=dt)
+
+        #plt.plot(time_plt, signal_smooth[0, i])
+        #plt.show()
 # Skip datasets where the number of stimulations is not between 2 and 3
 #if not (2 <= num_stimulations <= 4): 
 #    continue
@@ -114,8 +159,8 @@ for i in range(n_responding_neurons):
     trial_variations[i] = np.std(responses_correlations[i, :, :])
 
 # Find the neuron with the most variation in trial correlations
-response_neuron_toplot_idx = np.argmax(trial_variations)
-response_neuron_toplot = responding_neurons[response_neuron_toplot_idx] 
+most_variable_neuron_idx = np.argmax(trial_variations)
+most_variable_neuron = responding_neurons[most_variable_neuron_idx] 
 
 # Responding neurons positions
 responding_positions = neuron_positions[responding_neurons]
@@ -219,7 +264,7 @@ for ie_idx in range(n_stimuli):
 
 # Lower the sampling rate so fitting is not so time consuming
 
-lowering_resolution_step = 4
+lowering_resolution_step = 10
 fitting_window = 80
 
 print("NEGF fitting")
@@ -233,11 +278,11 @@ min_constrain_dict = {
                 "E_c": -12000,  
                 }
 max_constrain_dict = {
-                "C": np.inf,          
-                "gamma": np.inf,  
-                "beta": np.inf, 
-                "gamma_g": np.inf,
-                "gamma_s": np.inf,
+                "C": 10000,          
+                "gamma": 10000,  
+                "beta": 10000, 
+                "gamma_g": 10000,
+                "gamma_s": 10000,
                 "E_s": 10000,
                 "E_c": 10000,  
                 }
@@ -248,11 +293,7 @@ fitted_parameters = lif_gf.ADAM_fit(
     target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
     max_iters=100,
     constrain=(min_constrain_dict, max_constrain_dict),
-    rms_tol=1e-3,
-    learning_rate = 5e-3,
-    beta1 = 0.9,
-    beta2 = 0.98,
-    eps = 1e-3,
+    rms_tol=1e-4,
     parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
     #loss_method='correlation'
 )
@@ -288,11 +329,10 @@ nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_paramete
 
 G  = lif_gf.total_G(G_degree)
 
-sig_corr = np.zeros((n_responding_neurons-1))
 for ie_idx in range(n_stimuli):
 
     # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
-    for i in np.arange(1, n_responding_neurons):
+    for i in range(n_responding_neurons):
         neu_i = responding_neurons[i]
         Y_nonlin_fit[ie_idx][i, :] = np.full_like(Y_nonlin_fit[ie_idx][i, :], signal_smooth[ie_idx][neu_i, stim_begin_idx])
         for j in range(n_responding_neurons):
@@ -300,20 +340,13 @@ for ie_idx in range(n_stimuli):
             delta_j = signal_smooth[ie_idx][neu_j, stim_begin_idx:] - signal_smooth[ie_idx][neu_j, stim_begin_idx]
             Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=dt)
             
-            if (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-02)): 
+            if i == 0 or (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-04)): 
                 continue
             #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
             nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
             #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding_neurons[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
             nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
-        sig_corr[i-1] += np.corrcoef(signal_smooth[ie_idx, responding_neurons[i], stim_begin_idx:], Y_nonlin_fit[ie_idx, i])[0, 1]/n_stimuli
-
-# Find the neuron with the most variation in trial correlations
-response_neuron_toplot_idx = np.argmax(sig_corr)+1
-response_neuron_toplot = responding_neurons[response_neuron_toplot_idx] 
-
-
-    
+            
 ###############
 # PREPARE PANELS PLOT
 ###############
@@ -388,7 +421,7 @@ for i, neu_i in enumerate(responding_neurons):
             ax2[0].axvline(0, c="k", alpha=0.5, label="stim. time")
             ax2[0].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Fitting")
 
-        elif neu_i == response_neuron_toplot:
+        elif neu_i == most_variable_neuron:
             ax2[1].set_title(panel_title, fontsize=10)
             ax2[1].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
             ax2[1].set_xlim(time_plt[0], time_plt[-1])
@@ -409,7 +442,7 @@ for i, neu_i in enumerate(responding_neurons):
     fit_lbl = "Linear kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
     if neu_i == stim_neuron:
         panel_title = "Stimulated "+ panel_title
-    elif neu_i == response_neuron_toplot:
+    elif neu_i == most_variable_neuron:
         ax2[1].plot(time_fit, fit_y[i], label=fit_lbl, c='black', lw=1, ls=fit_ls)
         ax2[1].legend(loc='upper left', bbox_to_anchor=(0, 1))
     if neu_i != stim_neuron: 
@@ -428,7 +461,7 @@ for i, neu_i in enumerate(responding_neurons):
 
 # Save plot with neuron index in filename
 filename = f"panels_mult_stimulation_fits_{fitting_window}_{lowering_resolution_step}.png"
-filename2 = f"response_neuron_toplot_response_{fitting_window}_{lowering_resolution_step}.png"
+filename2 = f"most_variable_neuron_response_{fitting_window}_{lowering_resolution_step}.png"
 fig.savefig(os.path.join(output_figure_dir, filename), bbox_inches="tight")
 plt.close(fig)        # Plot heatmaps for each neuron pair
 fig2.savefig(os.path.join(output_figure_dir, filename2), bbox_inches="tight")

@@ -127,11 +127,11 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             n_responding_neurons_labeled = len(np.array(responding_neurons)[labeled_neurons])
 
-            if n_responding_neurons_labeled > 10 or n_responding_neurons_labeled < 3:
+            if n_responding_neurons_labeled > 14 or n_responding_neurons_labeled <3:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons_labeled} labeled responding neurons.")
                 continue
             
-            if n_responding_neurons > 10 or n_responding_neurons < 4:
+            if n_responding_neurons > 14 or n_responding_neurons < 3:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons} responding neurons.")
                 continue
 
@@ -156,7 +156,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             most_variable_neuron_idx = np.argmax(trial_variations)
             most_variable_neuron = responding_neurons[most_variable_neuron_idx] 
 
-            if np.mean(responses_correlations[0]) < 0.5:
+            if np.mean(responses_correlations[0]) < 0.4:
                 print(f"   Skipping dataset {stim_neu_path} with low stimuli correlations.")
                 continue
             
@@ -268,7 +268,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 6
+            lowering_resolution_step = 4
             fitting_window = 80
 
             print("NEGF fitting")
@@ -297,9 +297,13 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
                 max_iters=500,
                 constrain=(min_constrain_dict, max_constrain_dict),
-                rms_tol=1e-2,
+                rms_tol=1e-3,
+                learning_rate = 1e-3,
+                beta1 = 0.9,
+                beta2 = 0.98,
+                eps = 1e-3,
                 parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
-                #loss_method='correlation'
+                loss_method='correlation'
             )
 
             # Compute green functions using the higher time resolution, but the fitted parameters

@@ -174,23 +174,11 @@ for (worm_idx, worm_dataset_path) in enumerate(wt_unc31_worms_datasets_paths_lis
 
 
             cache_file_path = os.path.join(output_data_dir, "fitted_parameters.pkl")
-            if worm_type == "wt":
-                worm_type_path = worm_type_wt_path
-            elif worm_type == "unc31":
-                worm_type_path = worm_type_unc31_path
-                
-            old_cache_file_path = os.path.join( "data/C_elegans_pumpprobre_exp/" + os.path.relpath(worm_dataset_path, worm_type_path) + f"/stim_neu_{stim_neuron_label}_{n_stimuli}x/fit_negf_consider_not_labeled_neurons", "fitted_parameters.pkl")
-            
+
             if os.path.exists(cache_file_path):
                 # Load parameters after fitting from the .pkl file
                 with open(cache_file_path, "rb") as f:  # 'rb' not 'r'
                     fitted_parameters = pickle.load(f)
-                f.close()
-            elif os.path.exists(old_cache_file_path):
-                with open(old_cache_file_path, "rb") as f:  
-                    fitted_parameters = pickle.load(f)
-                print('Found cache in old directory')
-                # Close the loaded data file
                 f.close()
 
             else:
@@ -239,7 +227,7 @@ for (worm_idx, worm_dataset_path) in enumerate(wt_unc31_worms_datasets_paths_lis
                         fit_y[i]
                     )[0, 1]
                     
-            if np.nanmean(signal_vs_negf_correlation)>0.2: # consider fitted data-model which has consistent prediction
+            if np.nanmean(signal_vs_negf_correlation)>0.3: # consider fitted data-model which has consistent prediction
                 if worm_type == "wt":
                     signal_vs_negf_correlation_wt.extend(signal_vs_negf_correlation.flatten())
                     signal_vs_linkernel_correlation_wt.extend(signal_vs_linkernel_correlation.flatten())
@@ -289,6 +277,8 @@ ax[1].legend(loc="upper left")
 plt.savefig(os.path.join(figures_path, "gammas_connectome_vs_fitted_scatter_plot.png"), bbox_inches="tight")
 plt.close(fig)
 
+
+
 # Bar plot with the correlation of the data
 gamma_g_corr_wt = np.corrcoef(gamma_g_connectome_wt, gamma_g_fitted_wt)[0, 1]
 gamma_g_corr_unc31 = np.corrcoef(gamma_g_connectome_unc31, gamma_g_fitted_unc31)[0, 1]
@@ -302,10 +292,10 @@ signal_vs_linkernel_correlation_unc31_mean = np.nanmean(signal_vs_linkernel_corr
 signal_vs_negf_correlation_wt_mean    = np.nanmean(signal_vs_negf_correlation_wt)
 signal_vs_negf_correlation_unc31_mean = np.nanmean(signal_vs_negf_correlation_unc31)
 
-wt_values = [signal_vs_linkernel_correlation_wt_mean, signal_vs_negf_correlation_wt_mean, gamma_g_corr_wt, gamma_s_corr_wt]
-unc31_values = [signal_vs_negf_correlation_unc31_mean, signal_vs_negf_correlation_unc31_mean, gamma_g_corr_unc31, gamma_s_corr_unc31]
+wt_values = [signal_vs_linkernel_correlation_wt_mean, signal_vs_negf_correlation_wt_mean]
+unc31_values = [signal_vs_negf_correlation_unc31_mean, signal_vs_negf_correlation_unc31_mean]
 
-labels = ["Signal vs Linear Kernel", "Signal vs NEGF", "Gap junction", "Chem. Syn."]
+labels = ["Linear Kernel pred. vs signal", "NEGF pred. vs signal"]
 
 x = np.arange(len(labels))  # the label locations
 width = 0.3  # width of the bars
@@ -317,14 +307,40 @@ bars2 = ax.bar(x + width/2, unc31_values, width, label='UNC31', color='orange', 
 # Formatting
 ax.set_ylabel("Correlation Coefficient")
 ax.set_ylim(0, 1)
-ax.set_title("Correlation Measures: WT vs UNC31")
+ax.set_title("Signal propagation kernels predictions vs measured activity")
 ax.set_xticks(x)
 ax.set_xticklabels(labels)
 ax.legend()
 ax.grid(axis="y")
 
 plt.tight_layout()
-plt.savefig(os.path.join(figures_path, "correlations_barplot_combined.png"))
+plt.savefig(os.path.join(figures_path, "correlations_barplot_signals.png"))
+plt.close(fig)
+
+
+wt_values = [gamma_g_corr_wt, gamma_s_corr_wt]
+unc31_values = [gamma_g_corr_unc31, gamma_s_corr_unc31]
+
+labels = ["Gap junction", "Chemical synapses"]
+
+x = np.arange(len(labels))  # the label locations
+width = 0.3  # width of the bars
+
+fig, ax = plt.subplots(figsize=(8, 5))
+bars1 = ax.bar(x - width/2, wt_values, width, label='WT', color='blue', alpha=0.99)
+bars2 = ax.bar(x + width/2, unc31_values, width, label='UNC31', color='orange', alpha=0.99)
+
+# Formatting
+ax.set_ylabel("Correlation Coefficient")
+ax.set_ylim(0, 1)
+ax.set_title("Fitted connections vs connectome")
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+ax.legend()
+ax.grid(axis="y")
+
+plt.tight_layout()
+plt.savefig(os.path.join(figures_path, "correlations_barplot_connections.png"))
 plt.close(fig)
 
 

@@ -239,7 +239,7 @@ class GreenFunctions:
         auto_stop: bool = True,
         rms_tol: float = 1e-5,
         max_iters: int = 1000,
-        learning_rate: float = 1e-2,
+        learning_rate: float = 1e-3,
         beta1: float = 0.9,
         beta2: float = 0.999,
         eps: float = 1e-5,
@@ -370,15 +370,7 @@ class GreenFunctions:
 
             if not isinstance(current_loss, float) or np.isnan(current_loss) or np.isinf(current_loss): 
                 print("Loss is not a valid float (NaN, infinite, or invalid type). Stopping optimization.")
-                
-                self.model_instance.parameters.update(p)
-                # Update Green's functions
-                self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt, p=p)
-
-                self.g = np.array(Parallel(n_jobs=-1)(
-                    delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt, p=p) for trial_idx in range(self.n_trials)
-                ))
-                return  self.model_instance.parameters
+                break
 
 
             if auto_stop and abs(prev_loss - current_loss) < rms_tol:

@@ -1,4 +1,6 @@
 import numpy as np
+
+"""
 from .integration import integral
 
 class nontt_conv(np.ndarray):
@@ -6,12 +8,9 @@ class nontt_conv(np.ndarray):
     Non-translational convolution class. 
     Inherits from np.ndarray and adds a method to compute a non-translational convolution between two kernel matrices or a kernel and input signal.
     '''
-    
-    columnNames = ["z","y","x"]
-    upToIndex = {}
 
     def __new__(cls, K1 : np.ndarray, K2 : np.ndarray, dt : float = 1.0):
-        """
+        '''
         Computes a non-translational convolution between two kernel matrices.
 
         Parameters:
@@ -21,7 +20,7 @@ class nontt_conv(np.ndarray):
 
         Returns:
         - np.ndarray: Output convolution matrix
-        """
+        '''
         resolution = K1.shape[0]
 
         out = np.zeros_like(K2) 
@@ -37,3 +36,33 @@ class nontt_conv(np.ndarray):
                 out[t] = integral(K1[t, :t] * K2[:t], dt, 8)
             
         return out
+"""
+
+def integral(values, dt, method_order):
+    # Placeholder for numerical integration
+    # You might use Simpson's rule, trapezoidal, or other custom integration
+    # Here we use a basic trapezoidal rule as an example
+    return np.trapz(values, dx=dt)
+
+class nontt_conv(np.ndarray):
+    '''
+    Non-translational convolution class.
+    Inherits from np.ndarray and adds a method to compute a non-translational convolution between two kernel matrices or a kernel and input signal.
+    '''
+
+    def __new__(cls, K1: np.ndarray, K2: np.ndarray, dt: float = 1.0):
+        resolution = K1.shape[0]
+
+        # Handle output shape and create new instance
+        out = np.zeros_like(K2)
+        obj = np.asarray(out).view(cls)
+
+        if K1.shape == K2.shape:
+            for t in range(resolution):
+                for t_prime in range(t + 1):
+                    obj[t, t_prime] = integral(K1[t, t_prime:t] * K2[t_prime:t, t_prime], dt, 8)
+        else:
+            for t in range(resolution):
+                obj[t] = integral(K1[t, :t] * K2[:t], dt, 8)
+
+        return obj

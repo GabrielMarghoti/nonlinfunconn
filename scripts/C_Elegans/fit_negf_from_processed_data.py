@@ -153,8 +153,8 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 trial_variations[i] = np.std(responses_correlations[i, :, :])
 
             # Find the neuron with the most variation in trial correlations
-            most_variable_neuron_idx = np.argmax(trial_variations)
-            most_variable_neuron = responding_neurons[most_variable_neuron_idx] 
+            response_neuron_toplot_idx = np.argmax(trial_variations)
+            response_neuron_toplot = responding_neurons[response_neuron_toplot_idx] 
 
             if np.mean(responses_correlations[0]) < 0.4:
                 print(f"   Skipping dataset {stim_neu_path} with low stimuli correlations.")
@@ -268,7 +268,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 4
+            lowering_resolution_step = 2
             fitting_window = 80
 
             print("NEGF fitting")
@@ -301,7 +301,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 learning_rate = 1e-3,
                 beta1 = 0.9,
                 beta2 = 0.98,
-                eps = 1e-3,
+                eps = 1e-4,
                 parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
                 loss_method='correlation'
             )
@@ -336,11 +336,11 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             #nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_neurons_labels, positions=responding_neurons_positions[:, [0,1]], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_after_fit_real_positions.png'))
         
             G  = lif_gf.total_G(G_degree)
-
+            sig_corr = np.zeros((n_responding_neurons-1))
             for ie_idx in range(n_stimuli):
 
                 # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
-                for i in range(n_responding_neurons):
+                for i in np.arange(1, n_responding_neurons):
                     neu_i = responding_neurons[i]
                     Y_nonlin_fit[ie_idx][i, :] = np.full_like(Y_nonlin_fit[ie_idx][i, :], signal_smooth[ie_idx][neu_i, stim_begin_idx])
                     for j in range(n_responding_neurons):
@@ -348,13 +348,19 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                         delta_j = signal_smooth[ie_idx][neu_j, stim_begin_idx:] - signal_smooth[ie_idx][neu_j, stim_begin_idx]
                         Y_nonlin_fit[ie_idx, i] += nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=dt)
                         
-                        if i == 0 or (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-04)): 
+                        if (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-02)): 
                             continue
                         #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
                         nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
                         #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding_neurons[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
                         nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
-                        
+                    sig_corr[i-1] += np.corrcoef(signal_smooth[ie_idx, responding_neurons[i], stim_begin_idx:], Y_nonlin_fit[ie_idx, i])[0, 1]/n_stimuli
+
+            # Find the neuron with the most variation in trial correlations
+            response_neuron_toplot_idx = np.argmax(sig_corr)+1
+            response_neuron_toplot = responding_neurons[response_neuron_toplot_idx] 
+
+                
             ###############
             # PREPARE PANELS PLOT
             ###############
@@ -433,7 +439,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                         ax2[0].axvline(0, c="k", alpha=0.5, label="stim. time")
                         ax2[0].axvspan(0, time_fit[fitting_window], color="gray", alpha=0.15, label="Fitting")
 
-                    elif neu_i == most_variable_neuron:
+                    elif neu_i == response_neuron_toplot:
                         ax2[1].set_title(panel_title, fontsize=10)
                         ax2[1].plot(time_plt, y_smooth_plt, label=lbl, c=stim_color, lw=lw)
                         ax2[1].set_xlim(time_plt[0], time_plt[-1])
@@ -454,7 +460,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 fit_lbl = "Linear kernel pred." #"|".join([str(nbp - 1) for nbp in n_branch_params])
                 if neu_i == stim_neuron:
                     panel_title = "Stimulated "+ panel_title
-                elif neu_i == most_variable_neuron:
+                elif neu_i == response_neuron_toplot:
                     ax2[1].plot(time_fit, fit_y[i], label=fit_lbl, c='black', lw=1, ls=fit_ls)
                     ax2[1].legend(loc='upper left', bbox_to_anchor=(0, 1))
                 if neu_i != stim_neuron: 
@@ -473,7 +479,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             # Save plot with neuron index in filename
             filename = f"panels_mult_stimulation_fits_{fitting_window}_{lowering_resolution_step}.png"
-            filename2 = f"most_variable_neuron_response_{fitting_window}_{lowering_resolution_step}.png"
+            filename2 = f"response_neuron_toplot_response_{fitting_window}_{lowering_resolution_step}.png"
             fig.savefig(os.path.join(output_figure_dir, filename), bbox_inches="tight")
             plt.close(fig)        # Plot heatmaps for each neuron pair
             fig2.savefig(os.path.join(output_figure_dir, filename2), bbox_inches="tight")

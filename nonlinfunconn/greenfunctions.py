@@ -256,8 +256,15 @@ class GreenFunctions:
             dt = self.dt 
 
         target = x
-
-        n_trials, n_nodes, time_len = target.shape
+        if target.ndim == 3:
+            n_trials, n_nodes, time_len = target.shape
+        elif target.ndim == 2:
+            n_trials = 1
+            n_nodes, time_len = target.shape
+            target = target[np.newaxis, ...]
+            x = x[np.newaxis, ...]
+        else:
+            raise ValueError("Input 'target' must have shape (n_trials, n_nodes, time_len) or (n_nodes, time_len)")
         
         target_nodes = target_nodes if target_nodes is not None else np.arange(n_nodes)
         n_targets = len(target_nodes)
@@ -293,7 +300,7 @@ class GreenFunctions:
         def loss(variant_self, p, X, Y):
 
             err = 0.0
-            for trial_idx in range(X.shape[0]):
+            for trial_idx in range(n_trials):
                 X_trial = X[trial_idx]
                 Y_trial = Y[trial_idx]
                 delta_X = X_trial - X_trial[:, [0]]

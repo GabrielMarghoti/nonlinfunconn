@@ -18,6 +18,7 @@ from nonlinfunconn.models.lif import LIF
 load_cache = "--load-cache" in sys.argv
 
 only_labeled_neurons = "--only-labeled-neurons" in sys.argv
+linear_fit = "--linear-fit" in sys.argv
 
 # default 
 figures_path = "figures/C_elegans_pumpprobre_exp/"
@@ -97,9 +98,6 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             stim_neuron_label = neuron_labels[stim_neuron]
 
-            output_data_dir = os.path.join(stim_neu_path, f"fit_negf")
-
-            output_figure_dir = os.path.join(figures_path, os.path.relpath(output_data_dir, data_path))
                         
             # Find first neighbors (nodes connected to stim via either gap or syn)
             first_neighbors = np.where((kunert_ODE_parameters["gamma_g"][:, stim_neuron] > 0) | (kunert_ODE_parameters["gamma_s"][:, stim_neuron] > 0))[0]
@@ -118,7 +116,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             first_second_responsive_nodes = [node for node in responding_neurons if node in allowed_nodes]
             
 
-            responding_neurons = first_second_responsive_nodes # = list(responding_neurons) # consider all responsive neurons
+            #responding_neurons = first_second_responsive_nodes # = list(responding_neurons) # consider all responsive neurons
             
             n_responding_neurons = len(responding_neurons)
 
@@ -127,11 +125,11 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             n_responding_neurons_labeled = len(np.array(responding_neurons)[labeled_neurons])
 
-            if n_responding_neurons_labeled > 14 or n_responding_neurons_labeled <3:
+            if n_responding_neurons_labeled > 12 or n_responding_neurons_labeled <3:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons_labeled} labeled responding neurons.")
                 continue
             
-            if n_responding_neurons > 14 or n_responding_neurons < 3:
+            if n_responding_neurons > 12 or n_responding_neurons < 3:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons} responding neurons.")
                 continue
 
@@ -140,6 +138,15 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 if any(label == '' for label in np.array(neuron_labels)[responding_neurons]):
                     print(f"   Skipping dataset {stim_neu_path} with some responding neuron not identified.")
                     continue
+
+            
+
+            output_data_dir = os.path.join(stim_neu_path, f"fit_negf_n_resp_neurons{n_responding_neurons}")
+            if linear_fit:
+                output_data_dir = os.path.join(stim_neu_path, f"fit_linear_GF_n_resp_neurons{n_responding_neurons}")
+                print("Linear fit selected, saving in", output_data_dir)
+
+            output_figure_dir = os.path.join(figures_path, os.path.relpath(output_data_dir, data_path))
 
             responses_correlations = np.zeros((n_responding_neurons, n_stimuli, n_stimuli))
             trial_variations = np.zeros(n_responding_neurons)
@@ -268,7 +275,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 2
+            lowering_resolution_step = 8
             fitting_window = 80
 
             print("NEGF fitting")
@@ -292,18 +299,19 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                             }
 
             fitted_parameters = lif_gf.ADAM_fit(
-                x=signal_smooth[:, responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
+                x=signal_smooth[0][responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
                 dt=lowering_resolution_step * dt,
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
-                max_iters=500,
+                max_iters=200,
                 constrain=(min_constrain_dict, max_constrain_dict),
                 rms_tol=1e-3,
-                learning_rate = 1e-3,
+                learning_rate = 1e-2,
                 beta1 = 0.9,
                 beta2 = 0.98,
-                eps = 1e-4,
+                eps = 1e-3,
+                fit_linear_model= linear_fit,
                 parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
-                loss_method='correlation'
+                #loss_method='correlation'
             )
 
             # Compute green functions using the higher time resolution, but the fitted parameters

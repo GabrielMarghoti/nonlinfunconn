@@ -96,6 +96,8 @@ responding_neurons = first_second_responsive_nodes # = list(responding_neurons) 
 
 n_responding_neurons = len(responding_neurons)
 
+print('Number of responding neurons: ', n_responding_neurons)
+
 responding_neurons_labels = np.array(neuron_labels)[responding_neurons]  # Create an array of labels for responding_neurons indexes
 labeled_neurons = [label != "" for label in responding_neurons_labels]  # Create a boolean list for non-empty labels
 
@@ -219,7 +221,7 @@ for ie_idx in range(n_stimuli):
 
 # Lower the sampling rate so fitting is not so time consuming
 
-lowering_resolution_step = 4
+lowering_resolution_step = 8
 fitting_window = 80
 
 print("NEGF fitting")
@@ -246,12 +248,12 @@ fitted_parameters = lif_gf.ADAM_fit(
     x=signal_smooth[:, responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
     dt=lowering_resolution_step * dt,
     target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
-    max_iters=100,
+    max_iters=1000,
     constrain=(min_constrain_dict, max_constrain_dict),
     rms_tol=1e-3,
     learning_rate = 5e-3,
     beta1 = 0.9,
-    beta2 = 0.98,
+    beta2 = 0.99,
     eps = 1e-3,
     parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
     #loss_method='correlation'

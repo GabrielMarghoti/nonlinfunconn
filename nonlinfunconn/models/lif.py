@@ -271,7 +271,7 @@ class LIF:
 
         return self.g0
 
-    def compute_direct_green_functions(self, Vs,  dt = None, neu_i=None, neu_j=None, iteration_index_MAX=10, p=None, return_estimated_V=False):
+    def compute_direct_green_functions(self, Vs,  dt = None, neu_i=None, neu_j=None, iteration_index_MAX=4, p=None, return_estimated_V=False):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -323,14 +323,14 @@ class LIF:
                 syn_act_j = self.d_synaptic_activation(V0[j], self.beta[i, j], self.Vth[i, j])
                 for _ in range(iteration_index_MAX):
                     div_factor = (1 - (delta_Ss[i, j] / (1 - self.S0[i, j])))
-                    valid_indexes = np.abs(div_factor) >= 1e-5
+                    valid_indexes = np.abs(div_factor) >= 1e-4
                     sigma[i, j][:, valid_indexes] = (
                         self.sigma0[i, j][:, valid_indexes] / syn_act_j
                     ) * (synaptic_diff * div_factor)[None, valid_indexes]
 
                     # Update delta_Ss
                     delta_Ss[i, j] = nontt_conv(sigma[i, j], delta_Vs[j], dt)
-                    if np.all(np.abs(delta_Ss[i, j] - prev_delta_S) < 1e-4):
+                    if np.all(np.abs(delta_Ss[i, j] - prev_delta_S) < 1e-3):
                         break
 
                     prev_delta_S = np.copy(delta_Ss[i, j])

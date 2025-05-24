@@ -104,6 +104,9 @@ labeled_neurons = [label != "" for label in responding_neurons_labels]  # Create
 
 n_responding_neurons_labeled = len(np.array(responding_neurons)[labeled_neurons])
 
+responding_neurons_positions = neuron_positions[responding_neurons]
+
+
 
 responses_correlations = np.zeros((n_responding_neurons, n_stimuli, n_stimuli))
 trial_variations = np.zeros(n_responding_neurons)
@@ -214,59 +217,6 @@ for ie_idx in range(n_stimuli):
             nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
             nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
 
-
-
-#########################################################################################################################################################
-
-# FIT NEGF
-
-# Lower the sampling rate so fitting is not so time consuming
-
-lowering_resolution_step = 4
-fitting_window = 80
-
-print("NEGF fitting")
-min_constrain_dict = {
-                "C": 0.0,          
-                "gamma": 0.0,  
-                "beta": 0.0, 
-                "gamma_g": 0.0,
-                "gamma_s": 0.0,
-                "E_s": -12000,  # the data is not mV so such parameters might have another dimension
-                "E_c": -12000,  
-                }
-max_constrain_dict = {
-                "C": np.inf,          
-                "gamma": np.inf,  
-                "beta": np.inf, 
-                "gamma_g": np.inf,
-                "gamma_s": np.inf,
-                "E_s": 10000,
-                "E_c": 10000,  
-                }
-
-fitted_parameters = lif_gf.ADAM_fit(
-    x=signal_smooth[:, responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
-    dt=lowering_resolution_step * dt,
-    target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
-    max_iters=100,
-    constrain=(min_constrain_dict, max_constrain_dict),
-    rms_tol=1e-3,
-    learning_rate = 5e-3,
-    beta1 = 0.9,
-    beta2 = 0.98,
-    eps = 1e-3,
-    parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
-    #loss_method='correlation'
-)
-
-# Compute green functions using the higher time resolution, but the fitted parameters
-lif_gf = nlfc.GreenFunctions(
-    model = LIF(n_responding_neurons, fitted_parameters),
-    x = signal_smooth[:, responding_neurons, stim_begin_idx::],
-    dt = dt,
-)
-
 g = lif_gf.g
 g0 = lif_gf.g0
 
@@ -277,8 +227,8 @@ K0= np.zeros_like(g0[:, :, 0, :])
 DyCon0 = np.zeros_like(model_parameters["gamma_g"])
 for i in range(n_responding_neurons):
     for j in range(n_responding_neurons):
-            K0[i, j] = np.sum(g0[i, j], axis=0) * dt
-            DyCon0[i, j] = np.sum(K0[i,j], axis=0) * dt
+            K0[i, j] = np.nansum(g0[i, j], axis=0) * dt
+            DyCon0[i, j] = np.nansum(K0[i,j], axis=0) * dt
 
 K = np.zeros_like(g[:, :, :, 0, :])
 for ie_idx in range(n_stimuli):
@@ -289,11 +239,17 @@ for ie_idx in range(n_stimuli):
         for j in range(n_responding_neurons):
             neu_i = responding_neurons[i]
             neu_j = responding_neurons[j]  
-            K[ie_idx][i, j] = np.sum(g[ie_idx][i, j], axis=0) * dt
-            DyCon[i, j] = np.sum(K[ie_idx][i,j], axis=0) * dt
-                    
-    nlfc.utils.netplots.neural_network(np.zeros_like(DyCon0), DyCon, DyCon, np.array(neuron_labels)[responding_neurons], save_path=os.path.join(stimulus_fig_path[ie_idx], f'Green_function_cumulative_sum_stim_{ie_idx}.png'))
+            delta_j = signal_smooth[ie_idx][neu_j, stim_begin_idx:] - signal_smooth[ie_idx][neu_j, stim_begin_idx]
+            Y_ji =  np.nansum(lif_gf.g[ie_idx][i, j], 0) * dt # nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=dt)
+            Y_ji = np.where((Y_ji < -70) | (Y_ji > 30), np.nan, Y_ji)  # set clipped values to nan
+            K[ie_idx][i, j] = Y_ji
+            DyCon[i, j] = np.nansum(K[ie_idx][i, j], 0) * dt
+    print('DyCon: ', DyCon)      
+    nlfc.utils.netplots.dynamics_network(DyCon[labeled_neurons][:, labeled_neurons], np.array(neuron_labels)[np.array(responding_neurons)[labeled_neurons]], save_path=os.path.join(stimulus_fig_path[ie_idx], f'Green_function_cumulative_sum_stim_{ie_idx}.png'))
 
+    #nlfc.utils.netplots.dynamics_network_3d(DyCon[labeled_neurons][:, labeled_neurons], np.array(neuron_labels)[np.array(responding_neurons)[labeled_neurons]], positions=responding_neurons_positions[labeled_neurons], save_path=os.path.join(stimulus_fig_path[ie_idx], f'Green_function_cumulative_sum_stim_{ie_idx}_3D_NET.png'))
+
+        
         
 for i in range(n_responding_neurons):
     for j in range(n_responding_neurons):

@@ -125,11 +125,11 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             n_responding_neurons_labeled = len(np.array(responding_neurons)[labeled_neurons])
 
-            if n_responding_neurons_labeled > 12 or n_responding_neurons_labeled <3:
+            if n_responding_neurons_labeled > 9 or n_responding_neurons_labeled <5:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons_labeled} labeled responding neurons.")
                 continue
             
-            if n_responding_neurons > 12 or n_responding_neurons < 3:
+            if n_responding_neurons > 9 or n_responding_neurons < 5:
                 print(f"   Skipping dataset {stim_neu_path} with {n_responding_neurons} responding neurons.")
                 continue
 
@@ -275,7 +275,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 8
+            lowering_resolution_step = 5
             fitting_window = 80
 
             print("NEGF fitting")

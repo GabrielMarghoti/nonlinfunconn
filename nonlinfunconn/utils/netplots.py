@@ -41,7 +41,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     # Add gap junctions (undirected edges, black)
     for i in range(num_nodes):
         for j in range(num_nodes):  # Avoid double-adding edges
-            if Ggap[i, j] > 0:
+            if Ggap[i, j] > 0.0:
                 gap_edges.append((j, i))  # Store as (source, target, weight)
                 gap_edge_weights.append(Ggap[i, j])  # Store weight
                 gap_edge_colors.append('black')  # Color for gap junctions
@@ -54,7 +54,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     # Add chemical synapses with color intensity based on Esyn values
     for i in range(num_nodes):
         for j in range(num_nodes):
-            if Gsyn[i, j] != 0:  # Only add edges where there is a synaptic connection
+            if Gsyn[i, j] >0.0:  # Only add edges where there is a synaptic connection
                 color = cmap(norm(Esyn[i, j]))
                 syn_edges.append((j, i))  # Store as (source, target, weight, color)
                 syn_edge_weights.append(Gsyn[i, j])  # Store weight
@@ -75,8 +75,10 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     syn_edge_weights = normalize_weights(np.array(syn_edge_weights))
 
     # Define layout
-    pos = positions if positions is not None else nx.circular_layout(G)
-    # nx.spring_layout(G, k=0.1, fixed=[0], pos={0: (1, 0)})
+    if positions is not None:
+        pos = positions
+    else:
+        pos = nx.spring_layout(G, seed=42)
 
     # Node size is proportional to the sum of weights of incoming and outgoing edges
     node_strengths = np.zeros(num_nodes)
@@ -92,7 +94,7 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
         node_sizes = np.full(num_nodes, min_size)  # Default size if all strengths are zero
     # Make the first node have a bold stroke
     node_border_colors = ['black'] * num_nodes
-    node_border_colors[0] = 'magenta'  # Set the first node's border color to red
+    node_border_colors[0] = 'red'  # Set the first node's border color to red
     node_border_widths = [1] * num_nodes
     node_border_widths[0] = 3  # Set the first node's border width to 3
 
@@ -117,13 +119,13 @@ def neural_network(Ggap, Gsyn, Esyn, labels=None, positions = None, save_path=No
     # Draw edges for synaptic connections with arrows
     nx.draw_networkx_edges(
         G, pos, ax=ax, edge_color=syn_edge_colors, arrows=True, width=syn_edge_weights, edgelist=syn_edges,
-        arrowstyle='->', arrowsize=10, connectionstyle='arc3,rad=0.2'  # Adjust arrow size and style here
+        arrowstyle='->', arrowsize=40, connectionstyle='arc3,rad=0.2'  # Adjust arrow size and style here
     )
 
     # Add legend
     legend_elements = [
         Line2D([0], [0], marker='o', color='w', label='Stimulated node', 
-               markerfacecolor='lightgray', markeredgecolor='magenta', markersize=8, markeredgewidth=1.6),
+               markerfacecolor='lightgray', markeredgecolor='red', markersize=8, markeredgewidth=1.6),
         Line2D([0], [0], marker='o', color='w', label='Responsive node', 
                markerfacecolor='lightgray', markeredgecolor='black', markersize=8, markeredgewidth=1),
         Line2D([0], [0], color='black', lw=2, label='Gap junction electrical synapse'),
@@ -199,22 +201,22 @@ def dynamics_network(A, labels=None, positions = None, save_path=None):
     
     num_nodes = len(A)
     G.add_nodes_from(range(num_nodes))
-    
-    # Create lists to store edges for gap junctions and chemical synapses
+
+
     edges = []
     edge_colors = []
     edge_weights = []
 
 
     # Normaliz colormap scaling
-    min_val, max_val =  min(A.min(),-1), max(A.max(),1)  # -55 to 10 mV
+    min_val, max_val =  -10,10 #min(A.min(),-1), max(A.max(),1)  # -55 to 10 mV
     norm = mcolors.Normalize(vmin=min_val, vmax=max_val)
     cmap = cm.get_cmap('coolwarm')  # Single colormap ranging from blue to red
 
     # Add chemical synapses with color intensity based on Esyn values
     for i in range(num_nodes):
         for j in range(num_nodes):
-            if A[i, j] != 0:  # Only add edges where there is a synaptic connection
+            if abs(A[i, j]) > 0.2e-0:  # Only add edges where there is a synaptic connection
                 color = cmap(norm(A[i, j]))
                 edges.append((j, i))  # Store as (source, target, weight, color)
                 edge_weights.append(np.abs(A[i, j]))  # Store weight
@@ -224,14 +226,14 @@ def dynamics_network(A, labels=None, positions = None, save_path=None):
     # Get edge colors
     # Normalize edge widths to a reasonable range (e.g., 1 to 10)
 
-    def normalize_weights(weights, min_width=0.2, max_width=2):
+    def normalize_weights(weights, min_width=0.0, max_width=4):
         if weights.size == 0:
             return weights  # or return np.zeros_like(weights) depending on context
         if np.max(weights) > 0 and np.max(weights) != np.min(weights):
             return min_width + (max_width - min_width) * (weights - np.min(weights)) / (np.max(weights) - np.min(weights))
         return np.full(len(weights), min_width)  # Default width if all weights are zero
 
-    edge_weights = normalize_weights(np.array(edge_weights))
+    edge_weights = normalize_weights(np.array(edge_weights), min_width=1.0, max_width=4)
 
     # Define layout
     if positions is not None:
@@ -246,7 +248,7 @@ def dynamics_network(A, labels=None, positions = None, save_path=None):
         node_strengths[j] = np.sum(np.abs(A[:, j])) + np.sum(np.abs(A[:, j]))
     
     # Normalize node sizes to a reasonable range (e.g., 100 to 1000)
-    min_size, max_size = 800, 1000
+    min_size, max_size = 900, 1100
     if np.max(node_strengths) > 0:
         node_sizes = min_size + (max_size - min_size) * (node_strengths - np.min(node_strengths)) / (np.max(node_strengths) - np.min(node_strengths))
     else:
@@ -272,10 +274,12 @@ def dynamics_network(A, labels=None, positions = None, save_path=None):
         linewidths=node_border_widths, node_size=node_sizes
     )
     
-    # Draw edges for synaptic connections with arrows
+
+    # Draw edges with alpha=0.6 for edge colors
+    edge_colors_alpha = [(c[0], c[1], c[2], 0.99) if isinstance(c, tuple) and len(c) == 4 else c for c in edge_colors]
     nx.draw_networkx_edges(
-        G, pos, ax=ax, edge_color=edge_colors, arrows=True, width=edge_weights, edgelist=edges,
-        arrowstyle='->', arrowsize=30  # Adjust arrow size and style here
+        G, pos, ax=ax, edge_color=edge_colors_alpha, arrows=True, width=edge_weights, edgelist=edges,
+        arrowstyle='->', arrowsize=40  # Adjust arrow size and style here
     )
 
     # Add legend
@@ -285,7 +289,7 @@ def dynamics_network(A, labels=None, positions = None, save_path=None):
         Line2D([0], [0], marker='o', color='w', label='Responsive nodes', 
                markerfacecolor='lightgray', markeredgecolor='black', markersize=8, markeredgewidth=1),
         Line2D([0], [0], color=cm.get_cmap('coolwarm')(1.0), lw=2, label='Signal amplification'),
-        Line2D([0], [0], color=cm.get_cmap('coolwarm')(0.0), lw=2, label='Signal suppresion')
+        Line2D([0], [0], color=cm.get_cmap('coolwarm')(0.0), lw=2, label='Signal suppresion'),
     ]
     ax.legend(handles=legend_elements, loc='best', fontsize=12)
 
@@ -301,6 +305,11 @@ def dynamics_network(A, labels=None, positions = None, save_path=None):
     else:
         fig.savefig(save_path, bbox_inches='tight')
     plt.close()
+
+
+
+
+
 
 def dynamics_network_3d(A, labels=None, positions=None, save_path=None, auto_angle=True):
     """

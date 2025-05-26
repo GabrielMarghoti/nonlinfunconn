@@ -165,7 +165,7 @@ resp_Es = kunert_ODE_parameters["Es"][responding_neurons][:, responding_neurons]
 # Plot gamma_g and gamma_s as heatmaps
 #nlfc.utils.netplots.connect_matrices_heatmap(resp_gamma_g, resp_gamma_s, responding_neurons_labels, os.path.join(output_figure_dir, 'gamma_g_gamma_s_heatmaps.png'))
 # plot neural network
-nlfc.utils.netplots.neural_network(resp_gamma_g, resp_gamma_s, resp_Es, responding_neurons_labels, save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_connectome_parameters.png'))
+nlfc.utils.netplots.neural_network(resp_gamma_g[labeled_neurons][:, labeled_neurons], resp_gamma_s[labeled_neurons][:, labeled_neurons], resp_Es[labeled_neurons][:, labeled_neurons], responding_neurons_labels[labeled_neurons], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_connectome_parameters.png'))
 
 # nodes at real positions
 #nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, responding_labels, positions=responding_neurons_positions[:, [0,1]], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_before_fit_real_positions.png'))
@@ -221,7 +221,13 @@ g = lif_gf.g
 g0 = lif_gf.g0
 
 # plot neural network after fitting
-nlfc.utils.netplots.neural_network(model_parameters["gamma_g"], model_parameters["gamma_s"], model_parameters["E_s"], np.array(neuron_labels)[responding_neurons], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_after_fit.png'))
+
+model_parameters["gamma_g"] = np.where((abs(model_parameters["gamma_g"]) < 1), 0.0, model_parameters["gamma_g"])
+model_parameters["gamma_s"] = np.where((abs(model_parameters["gamma_s"]) < 1), 0.0, model_parameters["gamma_s"])
+nlfc.utils.netplots.neural_network(model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons], model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons], model_parameters["E_s"][labeled_neurons][:, labeled_neurons], np.array(neuron_labels)[np.array(responding_neurons)[labeled_neurons]], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_after_fit.png'))
+Adj = model_parameters["gamma_g"][labeled_neurons][:, labeled_neurons] + model_parameters["gamma_s"][labeled_neurons][:, labeled_neurons]
+# plot neural network after fitting
+nlfc.utils.netplots.neural_network(Adj,np.zeros_like(Adj), np.zeros_like(Adj), np.array(neuron_labels)[np.array(responding_neurons)[labeled_neurons]], save_path=os.path.join(output_figure_dir, f'Neural_Network_Adj_responding_only_after_fit.png'))
 
 K0= np.zeros_like(g0[:, :, 0, :])
 DyCon0 = np.zeros_like(model_parameters["gamma_g"])
@@ -235,15 +241,22 @@ for ie_idx in range(n_stimuli):
     DyCon = np.zeros_like(model_parameters["gamma_s"])
     os.makedirs(stimulus_fig_path[ie_idx], exist_ok=True)
     # save plot the NEGF for each stimulation and each neuron pair (consider source only the stim neuron)
-    for i in range(n_responding_neurons):
-        for j in range(n_responding_neurons):
+    for j in range(n_responding_neurons):
+        for i in np.arange(1, n_responding_neurons):
+            if i==j: continue
             neu_i = responding_neurons[i]
             neu_j = responding_neurons[j]  
             delta_j = signal_smooth[ie_idx][neu_j, stim_begin_idx:] - signal_smooth[ie_idx][neu_j, stim_begin_idx]
-            Y_ji =  np.nansum(lif_gf.g[ie_idx][i, j], 0) * dt # nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=dt)
-            Y_ji = np.where((Y_ji < -70) | (Y_ji > 30), np.nan, Y_ji)  # set clipped values to nan
-            K[ie_idx][i, j] = Y_ji
+            if j==0:
+                Y_ji = lif_gf.g[ie_idx][i, j]
+            else:
+                Y_ji = nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], lif_gf.g[ie_idx][j, 0], dt=dt)
+            
+            #Y_ji = np.where((Y_ji < -100) | (Y_ji > 100), np.nan, Y_ji)  # set clipped values to nan
+            K[ie_idx][i, j] =   np.nansum(Y_ji, 0) * dt #np.nansum(lif_gf.g[ie_idx][i, j], 0) * dt # nlfc.utils.nontt_conv(lif_gf.g[ie_idx][i, j], delta_j, dt=dt)
             DyCon[i, j] = np.nansum(K[ie_idx][i, j], 0) * dt
+
+    DyCon = np.where((abs(DyCon) < 1), 0.0, DyCon)
     print('DyCon: ', DyCon)      
     nlfc.utils.netplots.dynamics_network(DyCon[labeled_neurons][:, labeled_neurons], np.array(neuron_labels)[np.array(responding_neurons)[labeled_neurons]], save_path=os.path.join(stimulus_fig_path[ie_idx], f'Green_function_cumulative_sum_stim_{ie_idx}.png'))
 

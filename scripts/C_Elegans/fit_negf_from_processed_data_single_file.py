@@ -221,7 +221,7 @@ for ie_idx in range(n_stimuli):
 
 # Lower the sampling rate so fitting is not so time consuming
 
-lowering_resolution_step = 8
+lowering_resolution_step = 5
 fitting_window = 80
 
 print("NEGF fitting")
@@ -250,7 +250,7 @@ fitted_parameters = lif_gf.ADAM_fit(
     target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
     max_iters=1000,
     constrain=(min_constrain_dict, max_constrain_dict),
-    rms_tol=1e-3,
+    rms_tol=1e-6,
     learning_rate = 5e-3,
     beta1 = 0.9,
     beta2 = 0.99,

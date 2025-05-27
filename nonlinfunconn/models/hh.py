@@ -42,12 +42,12 @@ class LIF:
             "E_Na"     :  50.0,         # Nernst reversal potentials, in mV
             "E_K"      : -77.0,
             "E_L"      : -55.0,
-            "gamma_g"  : 100,  # Conductance for gap juctions [pS]
-            "gamma_s"  : 100,  # Synaptic decay for chemical synapses [pS]
+            "g_gap"  : 100,  # Conductance for gap juctions [pS]
+            "g_syn"  : 100,  # Synaptic decay for chemical synapses [pS]
             "gamma": 10,     # Membrane potential decay rate  [pS]
             "beta": 0.125,   # Inverse synaptic timescale   [mV^-1]
             "Vth": -50.0,     # Threshold potential for synapse activation, middle of sigmoig function
-            "E_s": 0.0,      # Synaptic reversal potential (default value is excitatory)
+            "E_syn": 0.0,      # Synaptic reversal potential (default value is excitatory)
             "a_r": 1.0,      # Synaptic rise time constant
             "a_d": 5.0,      # Synaptic decay time constant
         }
@@ -66,14 +66,19 @@ class LIF:
         Vth     = self.parameters["Vth"]
 
         # Expand parameters to appropriate shapes
-        self.C       = expandtoarray(self.parameters["C"]      , (num_nodes))
-        self.E_c     = expandtoarray(self.parameters["E_c"]    , (num_nodes))
-        self.gamma_g = expandtoarray(self.parameters["gamma_g"], (num_nodes, num_nodes))
-        self.gamma_s = expandtoarray(self.parameters["gamma_s"], (num_nodes, num_nodes))
-        self.E_s     = expandtoarray(self.parameters["E_s"]    , (num_nodes, num_nodes))
-        self.beta    = expandtoarray(self.parameters["beta"]   , (num_nodes, num_nodes))
-        self.a_r     = expandtoarray(self.parameters["a_r"]    , (num_nodes, num_nodes))
-        self.a_d     = expandtoarray(self.parameters["a_d"]    , (num_nodes, num_nodes))
+        self.C        = expandtoarray(self.parameters["C"]       , (num_nodes))
+        self.E_Na     = expandtoarray(self.parameters["E_Na"]    , (num_nodes))
+        self.E_K      = expandtoarray(self.parameters["E_K"]     , (num_nodes))
+        self.E_L      = expandtoarray(self.parameters["E_L"]     , (num_nodes))
+        self.g_Na_bar = expandtoarray(self.parameters["g_Na_bar"], (num_nodes))
+        self.g_K_bar  = expandtoarray(self.parameters["g_K_bar"] , (num_nodes))
+        self.g_L_bar  = expandtoarray(self.parameters["g_L_bar"] , (num_nodes))
+        self.g_gap    = expandtoarray(self.parameters["g_gap"]   , (num_nodes, num_nodes))
+        self.g_syn    = expandtoarray(self.parameters["g_syn"]   , (num_nodes, num_nodes))
+        self.E_syn    = expandtoarray(self.parameters["E_syn"]   , (num_nodes, num_nodes))
+        self.beta     = expandtoarray(self.parameters["beta"]    , (num_nodes, num_nodes))
+        self.a_r      = expandtoarray(self.parameters["a_r"]     , (num_nodes, num_nodes))
+        self.a_d      = expandtoarray(self.parameters["a_d"]     , (num_nodes, num_nodes))
         
         # find Vth as the equilibrium value, so the chemical synapse as term phi = 0.5, half oppened channels
         _Veq, _Seq = self.find_eq_self_consistent() # self.find_equilibrium(np.zeros((num_neurons)))

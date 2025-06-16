@@ -81,14 +81,20 @@ end
 function hh_model!(du, u, p, t)
     
     # Load parameters in the integrator step function
-    C_m, g_Na_bar, g_K_bar, g_L_bar, E_Na, E_K, E_L, N, A, B, Es, a_r, a_d, beta, V_th, I_ext, stim1, stim2 = p
+    C_m, g_Na_bar, g_K_bar, g_L_bar, E_Na, E_K, E_L, N, A, B, Es, a_r, a_d, beta, V_th, I_ext,  stim_amplitude, stim_starts, stim_ends = p
 
     for i=1:N # Iteration over neurons variables
         V, m, h, n = u[i, 1:4]
 
         I_ext = 0.0
-        if i == 1 && (t>=2.0 && t<=6.0) # || (t>=10.0 && t<=11.0) || (t>=20.0 && t<=21.0) # Adds external stimulation
-            I_ext += stim1
+        for stim_idx in 1:size(stim_starts, 2)
+            t_start = stim_starts[i, stim_idx]
+            t_end = stim_ends[i, stim_idx]
+            if !isnan(t_start) && !isnan(t_end)
+                if t >= t_start && t <= t_end
+                    I_ext += stim_amplitude
+                end
+            end
         end
 
         for j=1:N # Coupling terms from pre-synaptic neurons
@@ -108,9 +114,9 @@ function main()
     
     # Time span
     ti =   0.0
-    tf =  64.0
+    tf =  150.0
     
-    resolution = 800 
+    resolution = 1500
 
     tspan = (ti, tf)
 
@@ -129,19 +135,21 @@ function main()
     E_L      = -55.0 
 
     # Synapses parameters
-    N    = 3 # Number of neurons
+    N    = 4 # Number of neurons
     
     # Coupling matrices, adjacency matrices
-    A    = [  0.0  0.0   0.0;  # S/F   # Gap junction coupling  
-              0.5  0.0   0.0;
-              0.0  0.0   0.0]   
+    A    = [  0.0  0.0   0.0  0.0;  # S/F   # Gap junction coupling  
+              0.0  0.0   0.0  0.0;
+              0.0  0.0   0.0  0.0;
+              0.0  0.0   0.0  0.0]   
 
-    B    = [  0.0  0.0   0.0;  # S/F    # Chemical synapse coupling
-              0.0  0.0   0.0;
-              0.0  0.5   0.0] 
+    B    = [  0.0  0.0   0.0  0.0;  # S/F   # Gap junction coupling  
+              0.0  0.0   0.0  0.0;
+              0.0  0.5   0.0  0.0;
+              0.2  0.2   0.5  0.0] 
 
     Es   = fill(0.0, (N,N))        # mV  # Synapse Nerst potential, determines excitation or inhibition 
-    #Es[3, 2] = -70                # Change this to control Inhibition(-70 value) depends on the synaptic receptor ion potential
+    Es[4, 3] = -70                # Change this to control Inhibition(-70 value) depends on the synaptic receptor ion potential
     a_r  = fill(5.0, (N,N))        # rates for synaptic channel conductance activity  
     a_d  = fill(5.0, (N,N))
     #a_r[4, 1] = 1.0
@@ -151,20 +159,40 @@ function main()
 
     # External current
     I_ext  =  0.0  # in μA/cm^2     
-    stim1  =  10.0  # in μA/cm^2    
-    stim2  =  0.0  # in μA/cm^2
+    stim_amplitude  =  10.0  # in μA/cm^2    
 
-    It = zeros(resolution)
-    for t =1:resolution
-        if ts[t]>=2.0 && ts[t]<=5.0 # || (t>=10.0 && t<=11.0) || (t>=20.0 && t<=21.0) # Adds external stimulation
-            It[t] += stim1
-        end 
-        
+    It = zeros(resolution, N)
+    # Define stimulation windows for each neuron as a dictionary
+    stim_starts = [
+        2.0   60.0  114.0;
+        2.0   64.0  110.0;
+        NaN   NaN   NaN
+        NaN   NaN   NaN
+    ]
+    stim_ends = [
+        5.0   63.0  117.0;
+        5.0   67.0  113.0;
+        NaN   NaN   NaN
+        NaN   NaN   NaN
+    ]
+    # Fill It using stim_starts and stim_ends matrices
+    for neuron in 1:N
+        for stim_idx in 1:size(stim_starts, 2)
+            t_start = stim_starts[neuron, stim_idx]
+            t_end = stim_ends[neuron, stim_idx]
+            if !isnan(t_start) && !isnan(t_end)
+                for t = 1:resolution
+                    if ts[t] >= t_start && ts[t] <= t_end
+                        It[t, neuron] = stim_amplitude
+                    end
+                end
+            end
+        end
     end
 
     ts_plot = [50; 80; 100; 120; 150; 180; 200; 220; 250; 300; 350; 400]
 
-    figures_path = "figures/HH_model_PHDqualification/NEGF_HH_DELTA_SYNAPSE_$(N)neurons_tf$(tf)/$(g_Na_bar)_$(g_K_bar)_$(g_L_bar)_$(E_Na)_$(E_K)_$(E_L)_syn_$(minimum(Es))_stim_$(I_ext)_$(stim1)_$(stim2)/"
+    figures_path = "figures/HH_model_PHDqualification/NEGF_HH_AND_circuit_$(N)neurons_tf$(tf)/$(g_Na_bar)_$(g_K_bar)_$(g_L_bar)_$(E_Na)_$(E_K)_$(E_L)_syn_$(minimum(Es))_stim_$(I_ext)_$(stim_amplitude))/"
     
     for i=1:N
         mkpath(figures_path*"/neuron$(i)/")
@@ -181,7 +209,7 @@ function main()
 
     for itr=1:5 #iteraction to remove transient and set parameter V_th equals to the equilibrium values V0
     # Solve the differential equations TRANSIENT
-        prob = ODEProblem(hh_model!, u0, tspan, [C_m, g_Na_bar, g_K_bar, g_L_bar, E_Na, E_K, E_L, N, A, B, Es, a_r, a_d, beta, V_th, I_ext, 0.0, 0.0])
+        prob = ODEProblem(hh_model!, u0, tspan, [C_m, g_Na_bar, g_K_bar, g_L_bar, E_Na, E_K, E_L, N, A, B, Es, a_r, a_d, beta, V_th, I_ext, 0.0, stim_starts, stim_ends])
         sol = solve(prob, Tsit5(),  dt=0.01, saveat=ts, reltol=1e-9, abstol=1e-9, maxiters = 1e7)
 
     #    png(plot(sol, layout=(4,1), lc=:black, xlabel=["" "" "" L"Time \ (ms)"], ylabel=["V(t) (mV)" "m(t)" "h(t)" "n(t)"], label="", frame_style=:box, size=(500,500), dpi=200), figures_path*"neuron$(i)/HH_variables_simulation_transient")
@@ -200,7 +228,7 @@ function main()
 
 
     # Solve the differential equations STIMULATED
-    prob = ODEProblem(hh_model!, u0, tspan, [C_m, g_Na_bar, g_K_bar, g_L_bar, E_Na, E_K, E_L, N, A, B, Es, a_r, a_d, beta, V_th, I_ext, stim1, stim2])
+    prob = ODEProblem(hh_model!, u0, tspan, [C_m, g_Na_bar, g_K_bar, g_L_bar, E_Na, E_K, E_L, N, A, B, Es, a_r, a_d, beta, V_th, I_ext, stim_amplitude, stim_starts, stim_ends])
     sol = solve(prob, Euler(), dt=0.01, saveat=ts, reltol=1e-9, abstol=1e-9, maxiters=1e7)
 
     V = zeros(resolution, N)
@@ -246,14 +274,17 @@ function main()
     end
     println("tau_i = ", tau_i)
 
-    plot_Vs =  plot(ts, [It V], layout=grid(N+1,1, heights=(0.1, 0.3, 0.3, 0.3)), 
-    lc=:black, xlabel=["" "" "" "Time (ms)"], ylabel=["Input Current I(t)" L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
+    plot_Vs =  plot(ts, V, layout=(N,1), 
+    lc=:black, xlabel=[ "" "" "Time (ms)"], ylabel=[ L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
     frame_style=:box, size=(500, 200*N+20), dpi=200, grid=false)
+    plot!(ts, It,layout=(N,1), lc=:red, label="I(t)", subplot=1, xlabel="Time (ms)")
+
     png(plot_Vs, figures_path*"Vs_variables_simulation_neurons")
     
-    plot_Delta_Vs =  plot(ts, [It DeltaV], layout=grid(N+1,1, heights=(0.1, 0.3, 0.3, 0.3)), 
-    lc=:black, xlabel=["" "" "" "Time (ms)"], ylabel=[L"I(t)" L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
+    plot_Delta_Vs =  plot(ts, DeltaV,  layout=(N,1), 
+    lc=:black, xlabel=[ "" "" "Time (ms)"], ylabel=[L"I(t)" L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
     frame_style=:box, size=(500, 200*N+20), dpi=200, grid=false)
+    plot!(ts, It, layout=(N,1),lc=:red, label="I(t)", subplot=1, xlabel="Time (ms)")
     
     png(plot_Delta_Vs, figures_path*"DeltaVs_variables_simulation_neurons")
 
@@ -389,9 +420,10 @@ function main()
 
     ext_comp = zeros(resolution, N)
 
-
-    for t=1:resolution  # external stim only to the first neurons
-        conv_exptau_I[t, 1] =  conv(exp.(-(ts[t].-ts[1:t])/(tau_i[1]))/C_m, It[1:t], dt)
+    for i=1:N
+        for t=1:resolution  # external stim only to the first neurons
+            conv_exptau_I[t, i] =  conv(exp.(-(ts[t].-ts[1:t])/(tau_i[i]))/C_m, It[1:t, i], dt)
+        end
     end
     for itr=ProgressBar(1:5)  #### iterative method to approximate sigma
         for i=1:N
@@ -443,7 +475,7 @@ function main()
             plot_conv_chi_V_i =  plot(ts, conv_chi_V_i, layout=(N,1), 
             lc=:black, xlabel=["" "" L"Time \ (ms)"], ylabel=L"(\chi_i \ast \Delta V_i)(t)", label=["Neuron 1" "Neuron 2" "Neuron 3"], 
             frame_style=:box, size=(500, 200*N+20), dpi=200, grid=false)
-            plot!(ts, It*maximum(conv_chi_V_i[:, i]), label ="", lc=:red)
+            
             png(plot_conv_chi_V_i, figures_path*"conv_ChiVs_variables_simulation_neurons")
             #
                 png(
@@ -956,6 +988,7 @@ function main()
     end
 
     neuron_colors= [:green, :blue, :orange]
+    input_colors= [:black, :gray, :magenta]
 
     comp_names = [L"\chi _1 ∗ ΔV _1"      L"G_{1,2} * \chi _2 ∗ ΔV_2"  L"G_{1,3} * \chi _3 ∗ ΔV_3";
                   L"G_{2,1} * \chi _1 ∗ ΔV_1" L"\chi _2 ∗ ΔV _2"       L"G_{2,3} * \chi _3 ∗ ΔV_3";
@@ -972,8 +1005,11 @@ function main()
             end
             plot!(plot_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
         end
-        plot!(plot_signal_components, ts, ext_comp[:, ni], lc=:red, ls=:solid, label=L"G_{%$ni, 1}*(e^{-(t-t')/\tau _0} \ast I(t'))(t)", subplot=ni)
+        #if ni!=3
+        #    plot!(plot_signal_components, ts, ext_comp[:, ni], lc=input_colors[ni], ls=:solid, label=L"I(t)", subplot=ni)
+        #end
     end
+
 
 
     png(plot_signal_components, figures_path*"DeltaVs_with_signal_components")
@@ -1000,7 +1036,9 @@ function main()
             end
             plot!(plot_V_chi_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
         end
-        plot!(plot_V_chi_signal_components, ts, ext_comp[:, ni], lc=:red, ls=:solid, label=L"G_{%$ni, 1}*(e^{-(t-t')/\tau _0} \ast I(t'))(t)", subplot=ni)
+        #if ni!=3
+        #    plot!(plot_V_chi_signal_components, ts, ext_comp[:, ni], lc=:red, ls=:solid, label=L"G_{%$ni, 1}*(e^{-(t-t')/\tau _0} \ast I(t'))(t)", subplot=ni)
+        #end
     end
 
 

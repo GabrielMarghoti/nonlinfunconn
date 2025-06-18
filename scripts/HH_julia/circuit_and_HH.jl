@@ -957,11 +957,6 @@ function main()
                 end
             end
         end
-        for t=1:resolution
-            if i != 1
-                conv_exptau_I[t, i] = conv(Gamma[t, 1:t, i, 1], conv_exptau_I[1:t, 1], dt)
-            end
-        end
     end
 
     est_V = zeros(size(DeltaV))
@@ -990,16 +985,18 @@ function main()
                   L"G_{2,1} * \chi _1 ∗ ΔV_1" L"\chi _2 ∗ ΔV _2"       L"G_{2,3} * \chi _3 ∗ ΔV_3";
                   L"G_{3,1} * \chi _1 ∗ ΔV_1" L"G_{3,2} * \chi _2 ∗ ΔV_2"  L"\chi _3 ∗ ΔV _3"]
 
-    plot_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false, legend=:outerright)
+    plot_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false)
     for ni in 1:N
 
         plot!(plot_signal_components, ts, est_V[:, ni].-V0[ni], lc=neuron_colors[ni], lw=5,la=0.4, label=L"ΔV _{%$ni}", subplot=ni, xlabel=(ni==N ? "Time (ms)" : ""), ylabel="Neuron $(ni)")
 
-        for nc in 1:N
-            if nc>ni
-                continue
+        if ni==3
+            for nc in 1:N
+                if nc>=ni
+                    continue
+                end
+                plot!(plot_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
             end
-            plot!(plot_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
         end
         #if ni!=3
         #    plot!(plot_signal_components, ts, ext_comp[:, ni], lc=input_colors[ni], ls=:solid, label=L"I(t)", subplot=ni)
@@ -1019,18 +1016,17 @@ function main()
                   L"G_{2,1} * \chi _1 ∗ ΔV_1" L"\chi _2 ∗ ΔV _2"       L"G_{2,3} * \chi _3 ∗ ΔV_3";
                   L"G_{3,1} * \chi _1 ∗ ΔV_1" L"G_{3,2} * \chi _2 ∗ ΔV_2"  L"\chi _3 ∗ ΔV _3"]
 
-    plot_V_chi_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false, legend=:outerright)
+    plot_V_chi_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false)
     for ni in 1:N
         plot!(plot_V_chi_signal_components, ts, est_V[:, ni].-V0[ni] .-signal_components[:, ni, ni], lc=neuron_colors[ni], lw=5,la=0.4, label=L"ΔV _{%$ni}-\chi _{%$ni} ∗ ΔV _{%$ni}", subplot=ni, xlabel=(ni==N ? "Time (ms)" : ""), ylabel="Neuron $(ni)")
 
-        for nc in 1:N
-            if nc==ni
-                continue
+        if ni==3
+            for nc in 1:N
+                if nc>=ni
+                    continue
+                end
+                plot!(plot_V_chi_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
             end
-            if nc>ni
-                continue
-            end
-            plot!(plot_V_chi_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
         end
         #if ni!=3
         #    plot!(plot_V_chi_signal_components, ts, ext_comp[:, ni], lc=:red, ls=:solid, label=L"G_{%$ni, 1}*(e^{-(t-t')/\tau _0} \ast I(t'))(t)", subplot=ni)

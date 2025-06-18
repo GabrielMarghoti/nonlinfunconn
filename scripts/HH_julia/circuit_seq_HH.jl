@@ -114,9 +114,9 @@ function main()
     
     # Time span
     ti =   0.0
-    tf =  150.0
+    tf =  100.0
     
-    resolution = 1500
+    resolution = 1000
 
     tspan = (ti, tf)
 
@@ -143,16 +143,20 @@ function main()
               0.0  0.0   0.0  0.0;
               0.0  0.0   0.0  0.0]   
 
-    B    = [  0.0  0.0   0.0  0.0;  # S/F   # Gap junction coupling  
+    B    = [  0.0  0.0   0.0  0.0;  # S/F   # Chemical junction coupling  
               0.0  0.0   0.0  0.0;
-              0.0  0.5   0.0  0.0;
-              0.2  0.2   0.5  0.0] 
+              0.0  1.0   0.0  0.0;
+              0.3  0.3   1.0  0.0] 
 
     Es   = fill(0.0, (N,N))        # mV  # Synapse Nerst potential, determines excitation or inhibition 
-    Es[4, 3] = -70                # Change this to control Inhibition(-70 value) depends on the synaptic receptor ion potential
-    a_r  = fill(5.0, (N,N))        # rates for synaptic channel conductance activity  
+    Es[4, 3] = -70                 # Change this to control Inhibition(-70 value) depends on the synaptic receptor ion potential
+    a_r  = fill(5.0, (N,N))          # rates for synaptic channel conductance activity  
     a_d  = fill(5.0, (N,N))
-    #a_r[4, 1] = 1.0
+    a_d[3, 2] = 1.0  
+    a_d[4, 3] = 1.0              # Change this to control the synaptic channel conductance decay rate
+    a_r[3, 2] = 0.5   
+    a_r[4, 3] = 0.5              # Change this to control the synaptic channel conductance rise rate
+
     beta    = fill(0.125, (N,N))      # (mV)⁻¹
     V_th = fill(-50.0  , (N,N))    #  mV    # update when having the equilibrium values
     #V_th[3, 2] = -10.0             #  mV    # alpha_S(V=V_th) = 1/2
@@ -164,15 +168,15 @@ function main()
     It = zeros(resolution, N)
     # Define stimulation windows for each neuron as a dictionary
     stim_starts = [
-        2.0   60.0  114.0;
-        2.0   64.0  110.0;
-        NaN   NaN   NaN
+        2.0   32.0  75.0;
+        2.0   36.0  71.0;
+        NaN   NaN   NaN;
         NaN   NaN   NaN
     ]
     stim_ends = [
-        5.0   63.0  117.0;
-        5.0   67.0  113.0;
-        NaN   NaN   NaN
+        5.0   35.0  78.0;
+        5.0   39.0  74.0;
+        NaN   NaN   NaN;
         NaN   NaN   NaN
     ]
     # Fill It using stim_starts and stim_ends matrices
@@ -192,7 +196,7 @@ function main()
 
     ts_plot = [50; 80; 100; 120; 150; 180; 200; 220; 250; 300; 350; 400]
 
-    figures_path = "figures/HH_model_PHDqualification/NEGF_HH_AND_circuit_$(N)neurons_tf$(tf)/$(g_Na_bar)_$(g_K_bar)_$(g_L_bar)_$(E_Na)_$(E_K)_$(E_L)_syn_$(minimum(Es))_stim_$(I_ext)_$(stim_amplitude))/"
+    figures_path = "figures/HH_model_PHDqualification/NEGF_HH_SEQ_circuit_$(N)neurons_tf$(tf)/$(g_Na_bar)_$(g_K_bar)_$(g_L_bar)_$(E_Na)_$(E_K)_$(E_L)_syn_$(minimum(Es))_stim_$(I_ext)_$(stim_amplitude))/"
     
     for i=1:N
         mkpath(figures_path*"/neuron$(i)/")
@@ -222,7 +226,7 @@ function main()
         
         gS0 = u0[:, 5:end]
 
-        V_th = [fill(V0[1], N) fill(V0[2], N) fill(V0[3], N)] 
+        V_th = [fill(V0[1], N) fill(V0[2], N) fill(V0[3], N)  fill(V0[4], N)] 
         
     end
 
@@ -275,14 +279,14 @@ function main()
     println("tau_i = ", tau_i)
 
     plot_Vs =  plot(ts, V, layout=(N,1), 
-    lc=:black, xlabel=[ "" "" "Time (ms)"], ylabel=[ L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
+    lc=:black, xlabel=[ "" "" "" "Time (ms)"], ylabel=[ L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
     frame_style=:box, size=(500, 200*N+20), dpi=200, grid=false)
     plot!(ts, It,layout=(N,1), lc=:red, label="I(t)", subplot=1, xlabel="Time (ms)")
 
     png(plot_Vs, figures_path*"Vs_variables_simulation_neurons")
     
     plot_Delta_Vs =  plot(ts, DeltaV,  layout=(N,1), 
-    lc=:black, xlabel=[ "" "" "Time (ms)"], ylabel=[L"I(t)" L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
+    lc=:black, xlabel=[ "" "" "" "Time (ms)"], ylabel=[L"I(t)" L"\Delta V(t)" L"\Delta V(t)" L"\Delta V(t)"], label=["External input" "Neuron 1" "Neuron 2" "Neuron 3"], 
     frame_style=:box, size=(500, 200*N+20), dpi=200, grid=false)
     plot!(ts, It, layout=(N,1),lc=:red, label="I(t)", subplot=1, xlabel="Time (ms)")
     
@@ -987,23 +991,26 @@ function main()
         end
     end
 
-    neuron_colors= [:green, :blue, :orange]
-    input_colors= [:black, :gray, :magenta]
+    neuron_colors= [:green, :blue, :purple, :orange]
+    input_colors= [:black, :gray, :purple, :magenta]
 
-    comp_names = [L"\chi _1 ∗ ΔV _1"      L"G_{1,2} * \chi _2 ∗ ΔV_2"  L"G_{1,3} * \chi _3 ∗ ΔV_3";
-                  L"G_{2,1} * \chi _1 ∗ ΔV_1" L"\chi _2 ∗ ΔV _2"       L"G_{2,3} * \chi _3 ∗ ΔV_3";
-                  L"G_{3,1} * \chi _1 ∗ ΔV_1" L"G_{3,2} * \chi _2 ∗ ΔV_2"  L"\chi _3 ∗ ΔV _3"]
+    comp_names = [L"\chi _1 ∗ ΔV _1"      L"G_{1,2} * \chi _2 ∗ ΔV_2"  L"G_{1,3} * \chi _3 ∗ ΔV_3" L"G_{1,4} * \chi _4 ∗ ΔV_4";
+                  L"G_{2,1} * \chi _1 ∗ ΔV_1" L"\chi _2 ∗ ΔV _2"       L"G_{2,3} * \chi _3 ∗ ΔV_3"  L"G_{2,4} * \chi _4 ∗ ΔV_4";
+                  L"G_{3,1} * \chi _1 ∗ ΔV_1" L"G_{3,2} * \chi _2 ∗ ΔV_2"  L"\chi _3 ∗ ΔV _3"  L"G_{3,4} * \chi _4 ∗ ΔV_4";
+                  L"G_{4,1} * \chi _1 ∗ ΔV_1" L"G_{4,2} * \chi _2 ∗ ΔV_2"   L"G_{4,3} * \chi _3 ∗ ΔV_3"  L"\chi _4 ∗ ΔV _4"]
 
-    plot_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false, legend=:outerright)
+    plot_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false)
     for ni in 1:N
 
         plot!(plot_signal_components, ts, est_V[:, ni].-V0[ni], lc=neuron_colors[ni], lw=5,la=0.4, label=L"ΔV _{%$ni}", subplot=ni, xlabel=(ni==N ? "Time (ms)" : ""), ylabel="Neuron $(ni)")
 
-        for nc in 1:N
-            if nc>ni
-                continue
+        if ni==4
+            for nc in 1:N
+                if nc>=ni
+                    continue
+                end
+                plot!(plot_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
             end
-            plot!(plot_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
         end
         #if ni!=3
         #    plot!(plot_signal_components, ts, ext_comp[:, ni], lc=input_colors[ni], ls=:solid, label=L"I(t)", subplot=ni)
@@ -1015,26 +1022,25 @@ function main()
     png(plot_signal_components, figures_path*"DeltaVs_with_signal_components")
 
 
+    neuron_colors= [:green, :blue, :purple, :orange]
+    input_colors= [:black, :gray, :purple, :magenta]
 
+    comp_names = [L"\chi _1 ∗ ΔV _1"      L"G_{1,2} * \chi _2 ∗ ΔV_2"  L"G_{1,3} * \chi _3 ∗ ΔV_3" L"G_{1,4} * \chi _4 ∗ ΔV_4";
+                  L"G_{2,1} * \chi _1 ∗ ΔV_1" L"\chi _2 ∗ ΔV _2"       L"G_{2,3} * \chi _3 ∗ ΔV_3"  L"G_{2,4} * \chi _4 ∗ ΔV_4";
+                  L"G_{3,1} * \chi _1 ∗ ΔV_1" L"G_{3,2} * \chi _2 ∗ ΔV_2"  L"\chi _3 ∗ ΔV _3"  L"G_{3,4} * \chi _4 ∗ ΔV_4";
+                  L"G_{4,1} * \chi _1 ∗ ΔV_1" L"G_{4,2} * \chi _2 ∗ ΔV_2"   L"G_{4,3} * \chi _4 ∗ ΔV_4"  L"\chi _4 ∗ ΔV _4"]
 
-    neuron_colors= [:green, :blue, :orange]
-
-    comp_names = [L"\chi _1 ∗ ΔV _1"      L"G_{1,2} * \chi _2 ∗ ΔV_2"  L"G_{1,3} * \chi _3 ∗ ΔV_3";
-                  L"G_{2,1} * \chi _1 ∗ ΔV_1" L"\chi _2 ∗ ΔV _2"       L"G_{2,3} * \chi _3 ∗ ΔV_3";
-                  L"G_{3,1} * \chi _1 ∗ ΔV_1" L"G_{3,2} * \chi _2 ∗ ΔV_2"  L"\chi _3 ∗ ΔV _3"]
-
-    plot_V_chi_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false, legend=:outerright)
+    plot_V_chi_signal_components = plot(layout=(N,1), size=(700, 200*N+30), dpi=200, frame_style=:box, grid=false)
     for ni in 1:N
         plot!(plot_V_chi_signal_components, ts, est_V[:, ni].-V0[ni] .-signal_components[:, ni, ni], lc=neuron_colors[ni], lw=5,la=0.4, label=L"ΔV _{%$ni}-\chi _{%$ni} ∗ ΔV _{%$ni}", subplot=ni, xlabel=(ni==N ? "Time (ms)" : ""), ylabel="Neuron $(ni)")
 
-        for nc in 1:N
-            if nc==ni
-                continue
+        if ni==4
+            for nc in 1:N
+                if nc>=ni
+                    continue
+                end
+                plot!(plot_V_chi_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
             end
-            if nc>ni
-                continue
-            end
-            plot!(plot_V_chi_signal_components, ts, signal_components[:, ni, nc], lc=neuron_colors[nc], ls=:dot, label=comp_names[ni, nc], subplot=ni)
         end
         #if ni!=3
         #    plot!(plot_V_chi_signal_components, ts, ext_comp[:, ni], lc=:red, ls=:solid, label=L"G_{%$ni, 1}*(e^{-(t-t')/\tau _0} \ast I(t'))(t)", subplot=ni)
@@ -1043,6 +1049,7 @@ function main()
 
 
     png(plot_V_chi_signal_components, figures_path*"DeltaVs-chi_i_signal_components")
+
 
 
 

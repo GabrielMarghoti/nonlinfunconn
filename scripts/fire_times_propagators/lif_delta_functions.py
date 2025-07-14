@@ -108,16 +108,18 @@ def compute_and_plot_kernels(spike_times, weights, V_trace, params):
     T = params['T']
     dt = params['dt']
     tau_m = params['tau_m']
+    V_th = params['V_th']
+    V_L = params['V_L']
     
     # --- 1. Plot Raster of network activity ---
     plt.figure(figsize=(12, 6))
-    plt.eventplot(spike_times, colors='black', linelengths=0.75)
+    plt.eventplot(spike_times, colors='gray', linelengths=0.75)
     plt.title('Network Activity (Raster Plot)')
     plt.xlabel('Time (ms)')
     plt.ylabel('Neuron ID')
     plt.xlim(0, T)
     plt.ylim(-1, N)
-    plt.grid(alpha=0.3)
+    plt.grid(alpha=0.0)
     
     # --- 2. First-Order Kernel (g_ij * ΔV_j) ---
     exc_connections = np.where(weights > 0)
@@ -151,9 +153,9 @@ def compute_and_plot_kernels(spike_times, weights, V_trace, params):
         plt.xlabel('Time (ms)')
         plt.ylabel('Membrane Potential (mV)')
         plt.legend()
-        plt.xlim(max(0, t_spike_j - 3*tau_m), t_spike_j + 5*tau_m)
+        plt.xlim(max(0, t_spike_j - 3*tau_m), t_spike_j + 10*tau_m)
         plt.ylim(params['V_r'] - 2, params['V_th'] + 5)
-        plt.grid(alpha=0.3)
+        plt.grid(alpha=0.0)
 
 
     # --- 3. Second-Order Kernel (g_ij * g_jk * ΔV_k) ---
@@ -192,7 +194,7 @@ def compute_and_plot_kernels(spike_times, weights, V_trace, params):
                 
                 t_kernel_2nd = np.arange(t_j, T, dt)
                 # The decay depends on the full path from k
-                second_order_psp = (E_ij * E_jk) * np.exp(-(t_kernel_2nd - t_k) / tau_m)
+                second_order_psp = (E_ij * E_jk)/((V_th-V_L)**2) * np.exp(-(t_kernel_2nd - t_k) / tau_m)
                 
                 end_idx = start_idx + len(second_order_psp)
                 if end_idx > len(total_second_order_effect):
@@ -216,7 +218,7 @@ def compute_and_plot_kernels(spike_times, weights, V_trace, params):
             plt.xlabel('Time (ms)')
             plt.ylabel('Membrane Potential (mV)')
             plt.legend()
-            plt.grid(alpha=0.3)
+            plt.grid(alpha=0.0)
 
 
 # ===================================================================
@@ -226,11 +228,11 @@ def compute_and_plot_kernels(spike_times, weights, V_trace, params):
 if __name__ == '__main__':
     # Run the simulation with parameters that ensure activity
     spike_data, weight_matrix, voltage_trace, sim_params = simulate_lif_network(
-        N=100, 
-        T=6000.0, 
-        w_exc=0.4,
+        N=50, 
+        T=5000.0, 
+        w_exc=0.5,
         I_bg=0.7, # Set background current
-        I_bg_std=0.3 # Add some noise
+        I_bg_std=0.5 # Add some noise
     )
     
     # Analyze and plot the results

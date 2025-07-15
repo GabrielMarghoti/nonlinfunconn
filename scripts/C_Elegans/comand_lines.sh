@@ -23,6 +23,12 @@ python3 scripts/C_Elegans/fit_negf_from_processed_data_single_file.py  --load-ca
 # fit for a single file 
 python3 scripts/C_Elegans/fit_NMM_from_processed_data_single_file.py  --load-cache --dataset-path:/home/gabrielm/projects/nonlinfunconn-main/data/C_elegans_pumpprobre_exp/worm_type_unc31/20220113_101730/stim_neu_AVDR/
 
+# fit for all dataset
+python3 scripts/C_Elegans/fit_neural_mass_model_from_processed_data.py  --load-cache   --worm-type:wt
+# fit all dataset for mutant worms
+python3 scripts/C_Elegans/fit_neural_mass_model_from_processed_data.py  --load-cache   --worm-type:unc31
+
+
 
 
 

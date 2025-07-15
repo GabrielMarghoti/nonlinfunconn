@@ -38,10 +38,6 @@ kunert_ODE_parameters_file_path = os.path.join(data_path, "kunert_ODE_parameters
 with open(kunert_ODE_parameters_file_path, "rb") as f:
     kunert_ODE_parameters = pickle.load(f)
 
-kunert_ODE_parameters['C'] = kunert_ODE_parameters['C']*200 # Helps the fitting to find best C, which converts the membrane potential to  the actual signal proportional to the model V, effectivelly a proportional constant that multiplies the capacitance
-
-print(f"ODE model parameters loaded from {kunert_ODE_parameters_file_path}")
-
 # Iterate over the folders whcih 
 
 print(" Processing specific stimulated neuron at ", stim_neu_path)     
@@ -237,8 +233,8 @@ for ie_idx in range(n_stimuli):
 
 # Lower the sampling rate so fitting is not so time consuming
 
-lowering_resolution_step = 5
-fitting_window = 80
+lowering_resolution_step = 2
+fitting_window = 100
 
 print("NEGF fitting")
 min_constrain_dict = {

@@ -1,5 +1,7 @@
 #
-# code for fit of convolution kernels, combination of linear (exponentials) or non-linear (NEGF) kernels
+# author: Gabriel Marghoti
+#
+# code for fit of convolution kernels, combination of linear (exponentials) or non-linear (NEGF) kernels based on the neural mass model
 #
 # inspired by 
 # https://github.com/leiferlab/pumpprobe/tree/main/scripts/fconnectivity/fit_responses_constrained_stim_eci
@@ -20,7 +22,7 @@ load_cache = "--load-cache" in sys.argv
 only_labeled_neurons = "--only-labeled-neurons" in sys.argv
 
 # default 
-figures_path = "figures/C_elegans_pumpprobre_exp/"
+figures_path = "figures/C_elegans_pumpprobre_exp/neural_mass_model/"
 data_path = "data/C_elegans_pumpprobre_exp/"
 for arg in sys.argv:
     _arg = arg.split(":")
@@ -71,7 +73,7 @@ n_stimuli, n_neurons, time_len = signal_smooth.shape
 
 stim_neuron_label = neuron_labels[stim_neuron]
 
-output_data_dir = os.path.join(stim_neu_path, f"fit_negf")
+output_data_dir = os.path.join(stim_neu_path, f"fit_negf_neural_mass_model")
 
 output_figure_dir = os.path.join(figures_path, os.path.relpath(output_data_dir, data_path))
             
@@ -152,21 +154,38 @@ os.makedirs(output_figure_dir, exist_ok=True)
 stimulus_data_path = [os.path.join(output_data_dir, f'trial_{ie_idx}') for ie_idx in range(n_stimuli)]
 stimulus_fig_path = [os.path.join(output_figure_dir, f'trial_{ie_idx}') for ie_idx in range(n_stimuli)]
 
+model_parameters = {
+    "tau": 1.0,                 # Membrane capacitance  [pF]
+    "w": 1.0,                   # Synaptic weight
+    "beta": 0.1,                # Steepness of the sigmoid function
+    "xth": 1.0,                  # Threshold potential for synapse activation
+}
 
 # save connectome based network considering only responsive neurons over all stimulations
 resp_gamma_g = kunert_ODE_parameters["gamma_g"][responding_neurons][:, responding_neurons] 
 resp_gamma_s = kunert_ODE_parameters["gamma_s"][responding_neurons][:, responding_neurons]
 resp_Es = kunert_ODE_parameters["Es"][responding_neurons][:, responding_neurons]
 
-# Plot gamma_g and gamma_s as heatmaps
-#nlfc.utils.netplots.connect_matrices_heatmap(resp_gamma_g, resp_gamma_s, responding_neurons_labels, os.path.join(output_figure_dir, 'gamma_g_gamma_s_heatmaps.png'))
+w = resp_gamma_g + resp_gamma_s
+w /= np.max(np.abs(w))  # Normalize weights to the maximum absolute value
+for resp_idx in range(n_responding_neurons):    
+    for resp_jdx in range(n_responding_neurons):
+        if resp_Es[resp_idx, resp_jdx] < 0 :
+            w[resp_idx, resp_jdx] =  resp_gamma_g[resp_idx, resp_jdx] - resp_gamma_s[resp_idx, resp_jdx]
+
+
+model_parameters["w"] = w
+
+
+# Plot resp_gamma_g and gamma_s as heatmaps
+#nlfc.utils.netplots.connect_matrices_heatmap(resp_gamma_g, resp_gamma_s, responding_neurons_labels, os.path.join(output_figure_dir, 'w_gamma_s_heatmaps.png'))
 # plot neural network
-nlfc.utils.netplots.neural_network(resp_gamma_g, resp_gamma_s, resp_Es, responding_neurons_labels, save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_connectome_parameters.png'))
+#nlfc.utils.netplots.neural_network(resp_gamma_g, resp_gamma_s, resp_Es, responding_neurons_labels, save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_connectome_parameters.png'))
 
 # nodes at real positions
 #nlfc.utils.netplots.neural_network(gamma_g, gamma_s, Es, responding_labels, positions=responding_neurons_positions[:, [0,1]], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_before_fit_real_positions.png'))
 
-model_parameters = kunert_ODE_parameters.copy()
+
 
 if load_cache:
     # Check if the cache file exists
@@ -180,21 +199,18 @@ if load_cache:
         
     else:
         print(f"Warning: Cache file '{cache_file_path}' does not exist. Proceeding without loading cached parameters.")
-        model_parameters["gamma_g"] = resp_gamma_g
-        model_parameters["gamma_s"] = resp_gamma_s
-        model_parameters["Es"] = resp_Es
+        model_parameters["w"] = w
+        
 
-if model_parameters["gamma_g"].shape[0] != n_responding_neurons:
-    model_parameters["gamma_g"] = resp_gamma_g
-    model_parameters["gamma_s"] = resp_gamma_s
-    model_parameters["Es"] = resp_Es
+if model_parameters["w"].shape[0] != n_responding_neurons:
+    model_parameters["w"] = w
 
 Y_nonlin_fit = np.zeros_like(signal_smooth[:, responding_neurons, stim_begin_idx:])
 
 G_degree = 2
 # initialize the greenfunctions class, computing the direct green functions of ecery tryal and every neuron pair interaction
 lif_gf = nlfc.GreenFunctions(
-    model = LIF(n_responding_neurons, model_parameters),
+    model = NM(n_responding_neurons, model_parameters),
     x = signal_smooth[:, responding_neurons, stim_begin_idx::],
     dt = dt,
 )
@@ -210,7 +226,7 @@ for ie_idx in range(n_stimuli):
             neu_i = responding_neurons[i]
             neu_j = responding_neurons[j]
             if i == 0 or (np.all(lif_gf.g[ie_idx][i, j] == 0)): continue
-            nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
+            nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g[ie_idx][i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'before_fit_negf_direct_g_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
             nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'before_fit_negf_G_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
 
 
@@ -226,22 +242,16 @@ fitting_window = 80
 
 print("NEGF fitting")
 min_constrain_dict = {
-                "C": 0.0,          
-                "gamma": 0.0,  
-                "beta": 0.0, 
-                "gamma_g": 0.0,
-                "gamma_s": 0.0,
-                "E_s": -12000,  # the data is not mV so such parameters might have another dimension
-                "E_c": -12000,  
+                    "tau": 0.0001  ,             
+                    "w": -1000,                   # Synaptic weight
+                    "beta": 0.00001,                # Steepness of the sigmoid function
+                    "xth": -100.0,                  # Threshold potential for synapse activation
                 }
 max_constrain_dict = {
-                "C": np.inf,          
-                "gamma": np.inf,  
-                "beta": np.inf, 
-                "gamma_g": np.inf,
-                "gamma_s": np.inf,
-                "E_s": 10000,
-                "E_c": 10000,  
+                    "tau":1000  ,             
+                    "w": 1000,                   # Synaptic weight
+                    "beta": 1000,                # Steepness of the sigmoid function
+                    "xth": 100.0,                  # Threshold potential for synapse activation
                 }
 
 fitted_parameters = lif_gf.ADAM_fit(
@@ -255,13 +265,13 @@ fitted_parameters = lif_gf.ADAM_fit(
     beta1 = 0.9,
     beta2 = 0.99,
     eps = 1e-3,
-    parameter_to_fit_list=['C', 'gamma', 'gamma_g', 'gamma_s', 'E_c', 'E_s', 'beta', 'Vth'],
+    parameter_to_fit_list=['tau', 'w', 'beta', 'xth'],
     #loss_method='correlation'
 )
 
 # Compute green functions using the higher time resolution, but the fitted parameters
 lif_gf = nlfc.GreenFunctions(
-    model = LIF(n_responding_neurons, fitted_parameters),
+    model = NM(n_responding_neurons, fitted_parameters),
     x = signal_smooth[:, responding_neurons, stim_begin_idx::],
     dt = dt,
 )
@@ -283,10 +293,10 @@ f.close()
 #########################################################################################################################################################
 
 # plot neural network after fitting
-nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_neurons_labels, save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_fitted_parameters.png'))
+nlfc.utils.netplots.neural_network(fitted_parameters["w"], fitted_parameters["w"],  fitted_parameters["w"], responding_neurons_labels, save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_fitted_parameters.png'))
 
 # nodes at real positions
-#nlfc.utils.netplots.neural_network(fitted_parameters["gamma_g"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_neurons_labels, positions=responding_neurons_positions[:, [0,1]], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_after_fit_real_positions.png'))
+#nlfc.utils.netplots.neural_network(fitted_parameters["w"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_neurons_labels, positions=responding_neurons_positions[:, [0,1]], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_after_fit_real_positions.png'))
 
 G  = lif_gf.total_G(G_degree)
 
@@ -305,7 +315,7 @@ for ie_idx in range(n_stimuli):
             if (np.all(abs(lif_gf.g[ie_idx][i, j]) < 1e-02)): 
                 continue
             #nlfc.utils.plots.t_t_heatmap(x, g[ie_idx][i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
-            nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g0[i, j, -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
+            nlfc.utils.plots.time_level_curves(time_fit, lif_gf.g[ie_idx][i, j], lif_gf.g[ie_idx][i, j,  -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'fitted_negf_direct_g_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
             #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[responding_neurons[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
             nlfc.utils.plots.time_level_curves(time_fit, G[ie_idx][i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {neuron_labels[neu_i]}<-{neuron_labels[neu_j]}", save_path= os.path.join(stimulus_fig_path[ie_idx],f'fitted_negf_G_neurons_neuron_pair_{neuron_labels[neu_i]}<-{neuron_labels[neu_j]}.png'))
         sig_corr[i-1] += np.corrcoef(signal_smooth[ie_idx, responding_neurons[i], stim_begin_idx:], Y_nonlin_fit[ie_idx, i])[0, 1]/n_stimuli
@@ -436,30 +446,29 @@ plt.close(fig)        # Plot heatmaps for each neuron pair
 fig2.savefig(os.path.join(output_figure_dir, filename2), bbox_inches="tight")
 plt.close(fig2)        # Plot heatmaps for each neuron pair
 
-# Scatter plot gamma_g and gamma_s as a function of the distance matrix
+# Scatter plot w  as a function of the distance matrix
 fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
 # Flatten the matrices for scatter plotting
 distances = distance_matrix_responding_neurons.flatten()
-gamma_g_values = fitted_parameters["gamma_g"].flatten()
-gamma_s_values = fitted_parameters["gamma_s"].flatten()
+w_values = fitted_parameters["w"].flatten()
 
 
-# Filter out None or NaN values from distances and corresponding gamma_g_values
-valid_indices = ~np.isnan(distances) & ~np.isnan(gamma_g_values) & ~np.isnan(gamma_s_values)
+# Filter out None or NaN values from distances and corresponding w_values
+valid_indices = ~np.isnan(distances) & ~np.isnan(w_values)
 
-# Plot gamma_g vs distance only for valid values
-ax[0].scatter(distances[valid_indices], gamma_g_values[valid_indices], alpha=0.8, label="gamma_g")
-ax[0].set_xlabel("Distance")
-ax[0].set_ylabel("gamma_g")
-ax[0].set_title("gamma_g vs Distance")
+# Plot w vs distance only for valid values
+ax[0].scatter(distances[valid_indices], w_values[valid_indices], alpha=0.8, label="")
+ax[0].set_xlabel(r"d")
+ax[0].set_ylabel(r"$w_{ij}$")
+ax[0].set_title("Coupling vs Distance")
 ax[0].grid(True)
 
-# Plot gamma_s vs distance
-ax[1].scatter(distances[valid_indices], gamma_s_values[valid_indices], alpha=0.8, label="gamma_s", color="orange")
-ax[1].set_xlabel("Distance")
-ax[1].set_ylabel("gamma_s")
-ax[1].set_title("gamma_s vs Distance")
+# Plot vs distance
+ax[1].scatter(1/distances[valid_indices]**2, w_values[valid_indices], alpha=0.8, label="", color="orange")
+ax[1].set_xlabel(r"d^1")
+ax[1].set_ylabel(r"$w_{ij}$")
+ax[1].set_title("coupling vs 1/d^2")
 ax[1].grid(True)
 
 # Adjust layout and save the figure

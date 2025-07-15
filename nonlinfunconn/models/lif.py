@@ -271,7 +271,7 @@ class LIF:
 
         return self.g0
 
-    def compute_direct_green_functions(self, Vs,  dt = None, neu_i=None, neu_j=None, iteration_index_MAX=4, p=None, return_estimated_V=False):
+    def compute_direct_green_functions(self, Vs,  dt = None, neu_i=None, neu_j=None, iteration_index_MAX=4, p=None, return_estimated_variables=False):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -279,7 +279,7 @@ class LIF:
             dt (float): Time step for simulation.
             Vs (np.ndarray): Membrane potential dynamics (time series).
             iteration_index_MAX (int): Max iterations for Neumann series.
-            return_estimated_V (bool): If True, also return estimated voltages.
+            return_estimated_variables (bool): If True, also return estimated voltages.
         """
         
         num_neurons, time_len = Vs.shape
@@ -341,7 +341,7 @@ class LIF:
                 g[i, j]  = self.gg0[i, j] + pi[i, j]
 
             
-        if return_estimated_V:
+        if return_estimated_variables:
             est_V = np.zeros_like(Vs)
             for i in range(num_neurons):
                 est_V[i, :] += V0[i]

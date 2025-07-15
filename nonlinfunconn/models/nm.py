@@ -27,7 +27,7 @@ class NM:
         """
         # Default parameters
         default_params = {
-            "tau": 1.0,                 # Membrane capacitance  [pF]
+            "tau": 10.0,                 # Membrane capacitance  [pF]
             "w": 1.0,                   # Synaptic weight
             "beta": 1.0,                # Steepness of the sigmoid function
             "xth": 0.0,                  # Threshold potential for synapse activation
@@ -83,7 +83,7 @@ class NM:
         return 1 / (1 + np.exp(-beta * (x - xth)))
 
 
-    def compute_direct_green_functions(self, xs,  dt = None, pop_i=None, pop_j=None, iteration_index_MAX=10, p=None, return_estimated_x=False):
+    def compute_direct_green_functions(self, xs,  dt = None, pop_i=None, pop_j=None, iteration_index_MAX=10, p=None, return_estimated_variables=False):
         """
         Compute the nonequilibrium Green's functions for the LIF network.
 
@@ -91,7 +91,7 @@ class NM:
             dt (float): Time step for simulation.
             xs (np.ndarray):poputation activity.
             iteration_index_MAX (int): Max iterations for Neumann series.
-            return_estimated_x (bool): If True, also return estimated activity.
+            return_estimated_variables (bool): If True, also return estimated activity.
         """
         
         num_nodes, time_len = xs.shape
@@ -122,11 +122,19 @@ class NM:
             for j in range(num_nodes):
                 if self.w[i, j] == 0:
                     continue  # Skip non-connected neurons
+                
+                small_delta_mask = np.abs(delta_xs[j]) >= 0.0001
 
-                g[i, j]  = heaviside_func*np.exp(ts_diff/self.tau)*self.w[i,j] * (((self.phi(xs[j], self.beta[i, j], self.xth[i, j]) - self.phi(xs[j, 0], self.beta[i, j], self.xth[i, j])))/(delta_xs[j, None]))[None, :]
+                # Compute Green's function as before
+                g[i, j][:][:, small_delta_mask] = heaviside_func[:, small_delta_mask] * np.exp(-ts_diff[:, small_delta_mask] / self.tau[i]) * self.w[i, j] * (
+                    (self.phi(xs[j, small_delta_mask], self.beta[i, j], self.xth[i, j]) - self.phi(xs[j, 0], self.beta[i, j], self.xth[i, j]))
+                    / (delta_xs[j, small_delta_mask])
+                )[None, :]
+
+                
 
             
-        if return_estimated_x:
+        if return_estimated_variables:
             est_x = np.zeros_like(xs)
             for i in range(num_nodes):
                 est_x[i, :] += x0[i]

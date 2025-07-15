@@ -18,6 +18,36 @@ python3 scripts/C_Elegans/corr_gammas.py
 python3 scripts/C_Elegans/fit_negf_from_processed_data_single_file.py  --load-cache --dataset-path:/home/gabrielm/projects/nonlinfunconn-main/data/C_elegans_pumpprobre_exp/worm_type_unc31/20220113_101730/stim_neu_AVDR/
 
 
+
+# NEURAL MASS MODEL
+# fit for a single file 
+python3 scripts/C_Elegans/fit_NMM_from_processed_data_single_file.py  --load-cache --dataset-path:/home/gabrielm/projects/nonlinfunconn-main/data/C_elegans_pumpprobre_exp/worm_type_unc31/20220113_101730/stim_neu_AVDR/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ######################## OLD ############################
 
 # Unc31 worms, without wirelless connections. fit exp kernels and NEGF, compare the predicted signals with observed activity

@@ -64,7 +64,8 @@ class GreenFunctions:
         self.g  = np.zeros((self.n_trials, self.n_nodes, self.n_nodes, self.time_len, self.time_len))
 
         # Compute Green's functions
-        self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt)
+        if hasattr(self.model_instance, "compute_direct_equilibrium_green_functions"):
+            self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt)
 
         self.g = np.array(Parallel(n_jobs=-1)(
             delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt) for trial_idx in range(self.n_trials)
@@ -314,7 +315,7 @@ class GreenFunctions:
                             est_V[i] += nontt_conv(g0[i, j], delta_X[j], dt)
                     Y_pred = est_V
                 else:
-                    _, Y_pred = variant_self.model_instance.compute_direct_green_functions(X_trial, dt, p=p, return_estimated_V=True)
+                    _, Y_pred = variant_self.model_instance.compute_direct_green_functions(X_trial, dt, p=p, return_estimated_variables=True)
 
                 if loss_method == 'correlation':
                     err += correlation_loss(Y_pred[target_nodes], Y_trial[target_nodes])
@@ -389,7 +390,10 @@ class GreenFunctions:
         self.model_instance.parameters.update(p)
 
         # Update Green's functions
-        self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt, p=p)
+
+        if hasattr(self.model_instance, "compute_direct_equilibrium_green_functions"):
+            self.g0 = self.model_instance.compute_direct_equilibrium_green_functions(time_len=self.time_len, dt=self.dt, p=p)
+
 
         self.g = np.array(Parallel(n_jobs=-1)(
             delayed(self.model_instance.compute_direct_green_functions)(self.x[trial_idx], dt=self.dt, p=p) for trial_idx in range(self.n_trials)

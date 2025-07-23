@@ -262,8 +262,8 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 10
-            fitting_window = 80
+            lowering_resolution_step = 1
+            fitting_window = 120
 
             print("NEGF fitting")
             min_constrain_dict = {
@@ -283,7 +283,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 x=signal_smooth[:, responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
                 dt=lowering_resolution_step * dt,
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
-                max_iters=500,
+                max_iters=800,
                 constrain=(min_constrain_dict, max_constrain_dict),
                 rms_tol=1e-6,
                 learning_rate = 5e-3,

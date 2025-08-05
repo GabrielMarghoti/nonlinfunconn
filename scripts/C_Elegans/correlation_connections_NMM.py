@@ -7,7 +7,8 @@ import os, sys, json
 import pickle # for cache saving/loading
 
 import nonlinfunconn as nlfc # for non-linear kernels
-from nonlinfunconn.models.lif import LIF
+from nonlinfunconn.models.nm import NM
+
 
 plot = True
 
@@ -188,7 +189,7 @@ for (worm_idx, worm_dataset_path) in enumerate(wt_unc31_worms_datasets_paths_lis
 
             # Compute green functions using the higher time resolution, but the fitted parameters
             lif_gf = nlfc.GreenFunctions(
-                model = LIF(n_responding_neurons, fitted_parameters),
+                model = NM(n_responding_neurons, fitted_parameters),
                 x = signal_smooth[:, responding_neurons, stim_begin_idx::],
                 dt = dt,
             )
@@ -225,27 +226,30 @@ for (worm_idx, worm_dataset_path) in enumerate(wt_unc31_worms_datasets_paths_lis
                         signal_smooth[ie_idx, responding_neurons[i], stim_begin_idx:], 
                         fit_y[i]
                     )[0, 1]
-                    
-            if np.nanmean(signal_vs_negf_correlation)>0.3: # consider fitted data-model which has consistent prediction
-                if worm_type == "wt":
-                    signal_vs_negf_correlation_wt.extend(signal_vs_negf_correlation.flatten())
-                    signal_vs_linkernel_correlation_wt.extend(signal_vs_linkernel_correlation.flatten())
 
-                    gamma_g_connectome_wt.extend(resp_gamma_g[labeled_neurons][:, labeled_neurons].flatten())
-                    gamma_s_connectome_wt.extend(resp_gamma_s[labeled_neurons][:, labeled_neurons].flatten())
-                    w_fitted_wt.extend(fitted_parameters["w"][labeled_neurons][:, labeled_neurons].flatten())
+            for i in np.arange(1, n_responding_neurons):
+                if np.nanmean(signal_vs_negf_correlation[:, i-1])>0.8 and labeled_neurons[i]: # consider fitted data-model which has consistent prediction
+          
+                    if worm_type == "wt":
+                        signal_vs_negf_correlation_wt.extend(signal_vs_negf_correlation.flatten())
+                        signal_vs_linkernel_correlation_wt.extend(signal_vs_linkernel_correlation.flatten())
 
-                    distances_wt.extend(distance_matrix_responding_neurons[labeled_neurons][:, labeled_neurons].flatten())
+                        gamma_g_connectome_wt.extend(resp_gamma_g[i, labeled_neurons].flatten())
+                        gamma_s_connectome_wt.extend(resp_gamma_s[i, labeled_neurons].flatten())
+                        w_fitted_wt.extend(fitted_parameters["w"][i, labeled_neurons].flatten())
 
-                elif worm_type == "unc31":
-                    signal_vs_negf_correlation_unc31.extend(signal_vs_negf_correlation.flatten())
-                    signal_vs_linkernel_correlation_unc31.extend(signal_vs_linkernel_correlation.flatten())
+                        distances_wt.extend(distance_matrix_responding_neurons[i, labeled_neurons].flatten())
 
-                    gamma_g_connectome_unc31.extend(resp_gamma_g[labeled_neurons][:, labeled_neurons].flatten())
-                    gamma_s_connectome_unc31.extend(resp_gamma_s[labeled_neurons][:, labeled_neurons].flatten())
-                    w_fitted_unc31.extend(fitted_parameters["w"][labeled_neurons][:, labeled_neurons].flatten())
+                    elif worm_type == "unc31":
+                        signal_vs_negf_correlation_unc31.extend(signal_vs_negf_correlation.flatten())
+                        signal_vs_linkernel_correlation_unc31.extend(signal_vs_linkernel_correlation.flatten())
 
-                    distances_unc31.extend(distance_matrix_responding_neurons[labeled_neurons][:, labeled_neurons].flatten())
+                        gamma_g_connectome_unc31.extend(resp_gamma_g[i, labeled_neurons].flatten())
+                        gamma_s_connectome_unc31.extend(resp_gamma_s[i, labeled_neurons].flatten())
+                        w_fitted_unc31.extend(fitted_parameters["w"][i, labeled_neurons].flatten())
+
+                        distances_unc31.extend(distance_matrix_responding_neurons[i, labeled_neurons].flatten())
+                            
             pass
 
         except Exception as e:
@@ -262,13 +266,15 @@ ax[0].set_ylabel(r"$|w_{ij}|$ (model fit)")
 ax[0].grid(True)
 ax[0].legend(loc="upper left")
 
-ax[1].scatter(gamma_s_connectome_wt, np.abs(w_fitted_unc31), alpha=0.8, color="blue", label="Wild Type")
+ax[1].scatter(gamma_s_connectome_wt, np.abs(w_fitted_wt), alpha=0.8, color="blue", label="Wild Type")
 ax[1].scatter(gamma_s_connectome_unc31, np.abs(w_fitted_unc31), alpha=0.8, color="orange", label="Mutant")
-ax[0].set_xlabel(r"$\gamma_s$ (connectome)")
-ax[0].set_ylabel(r"$|w_{ij}|$ (model fit)")
+ax[1].set_xlabel(r"$\gamma_s$ (connectome)")
+ax[1].set_ylabel(r"$|w_{ij}|$ (model fit)")
 ax[1].grid(True)
 ax[1].legend(loc="upper left")
 
+ax[0].set_ylim(top=180)
+ax[1].set_ylim(top=180)
 plt.savefig(os.path.join(figures_path, "gammas_connectome_vs_fitted_scatter_plot.png"), bbox_inches="tight")
 plt.close(fig)
 
@@ -290,7 +296,7 @@ signal_vs_negf_correlation_unc31_mean = np.nanmean(signal_vs_negf_correlation_un
 wt_values = [signal_vs_linkernel_correlation_wt_mean, signal_vs_negf_correlation_wt_mean]
 unc31_values = [signal_vs_negf_correlation_unc31_mean, signal_vs_negf_correlation_unc31_mean]
 
-labels = ["Linear Kernel pred. vs signal", "NEGF pred. vs signal"]
+labels = ["Linear Kernel pred. vs signal", "Nonlinear kernel pred. vs signal"]
 
 x = np.arange(len(labels))  # the label locations
 width = 0.3  # width of the bars
@@ -322,8 +328,8 @@ x = np.arange(len(labels))  # the label locations
 width = 0.3  # width of the bars
 
 fig, ax = plt.subplots(figsize=(8, 5))
-bars1 = ax.bar(x - width/2, wt_values, width, label='WT', color='blue', alpha=0.99)
-bars2 = ax.bar(x + width/2, unc31_values, width, label='UNC31', color='orange', alpha=0.99)
+bars1 = ax.bar(x - width/2, wt_values, width, label='Wild Type', color='blue', alpha=0.99)
+bars2 = ax.bar(x + width/2, unc31_values, width, label='Mutant', color='orange', alpha=0.99)
 
 # Formatting
 ax.set_ylabel("Correlation Coefficient")

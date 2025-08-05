@@ -6,9 +6,9 @@ from ..utils.nontt_conv import  nontt_conv
 from ..utils.expandtoarray import expandtoarray
 
 
-class NM:
+class NMepsgamma:
     """
-    Neural Mass model class.
+    Neural Mass model class variant with epsilon and gamma parameters.
     """
     
     def __init__(self, num_nodes: int, params: dict):
@@ -27,8 +27,9 @@ class NM:
         """
         # Default parameters
         default_params = {
-            "tau": 10.0,       
-            "w": 1.0,               # adjacency matrix
+            "tau": 10.0,                # Time constant for neuron activation relaxation 
+            "epsilon": 1.0,                   # coupling weight
+            "gamma": 1.0,               # adjacency matrix
             "beta": 1.0,                # Steepness of the sigmoid function
             "xth": 0.0,                 # Threshold potential for synapse activation
         }
@@ -43,13 +44,15 @@ class NM:
 
         # Expand parameters to appropriate shapes
         self.tau      = expandtoarray(self.parameters["tau"] , (num_nodes))
-        self.w        = expandtoarray(self.parameters["w"]   , (num_nodes, num_nodes))
+        self.epsilon        = expandtoarray(self.parameters["epsilon"]   , (num_nodes))
+        self.gamma        = expandtoarray(self.parameters["gamma"]   , (num_nodes, num_nodes))
         self.beta     = expandtoarray(self.parameters["beta"], (num_nodes, num_nodes))
         self.xth      = expandtoarray(self.parameters["xth"] , (num_nodes, num_nodes))
         
         self.parameters.update({
             "tau": self.tau,      
-            "w": self.w,  
+            "epsilon": self.epsilon,  
+            "gamma": self.gamma,  
             "beta": self.beta, 
             "xth": self.xth,   
         })
@@ -120,13 +123,13 @@ class NM:
 
         for i in range(num_nodes):
             for j in range(num_nodes):
-                if self.w[i, j] == 0:
+                if self.gamma[i, j] == 0:
                     continue  # Skip non-connected neurons
                 
                 small_delta_mask = np.abs(delta_xs[j]) >= 0.0001
 
                 # Compute Green's function as before
-                g[i, j][:, small_delta_mask] = heaviside_func[:, small_delta_mask] * np.exp(-ts_diff[:, small_delta_mask] / self.tau[i]) * self.w[i, j] * (
+                g[i, j][:, small_delta_mask] = heaviside_func[:, small_delta_mask] * np.exp(-ts_diff[:, small_delta_mask] / self.tau[i]) * self.epsilon[j] * self.gamma[i, j] * (
                     (self.phi(xs[j, small_delta_mask], self.beta[i, j], self.xth[i, j]) - self.phi(xs[j, 0], self.beta[i, j], self.xth[i, j]))
                     / (delta_xs[j, small_delta_mask])
                 )[None, :]

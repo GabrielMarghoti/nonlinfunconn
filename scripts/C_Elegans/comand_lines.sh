@@ -31,6 +31,9 @@ python3 scripts/C_Elegans/fit_neural_mass_model_from_processed_data.py  --load-c
 
 
 
+# Correlation between fitted adjancy matrix and connetome
+python3 scripts/C_Elegans/correlation_connections_NMM.py 
+
 
 
 

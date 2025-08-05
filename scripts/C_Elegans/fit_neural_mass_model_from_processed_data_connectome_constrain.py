@@ -22,7 +22,7 @@ only_labeled_neurons = "--only-labeled-neurons" in sys.argv
 linear_fit = "--linear-fit" in sys.argv
 
 # default 
-figures_path = "figures/C_elegans_pumpprobre_exp/neural_mass_model/"
+figures_path = "figures/C_elegans_pumpprobre_exp/neural_mass_model_conn_constrain/"
 data_path = "data/C_elegans_pumpprobre_exp/"
 worm_type   = "wt"
 
@@ -98,7 +98,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             stim_neuron_label = neuron_labels[stim_neuron]
 
-            output_data_dir = os.path.join(stim_neu_path, f"fit_negf_neural_mass_model")
+            output_data_dir = os.path.join(stim_neu_path, f"fit_negf_neural_mass_model_conn_constrain")
 
             output_figure_dir = os.path.join(figures_path, os.path.relpath(output_data_dir, data_path))
                         
@@ -180,7 +180,8 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             model_parameters = {
                 "tau": 1.0,                 # Membrane capacitance  [pF]
-                "w": 1.0,                   # Synaptic weight
+                "epsilon": 1.0,                   # Synaptic weight
+                "gamma": 1.0,                   # Synaptic weight
                 "beta": 0.1,                # Steepness of the sigmoid function
                 "xth": 1.0,                  # Threshold potential for synapse activation
             }
@@ -190,15 +191,15 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             resp_gamma_s = kunert_ODE_parameters["gamma_s"][responding_neurons][:, responding_neurons]
             resp_Es = kunert_ODE_parameters["Es"][responding_neurons][:, responding_neurons]
 
-            w = resp_gamma_g + resp_gamma_s
-            w /= np.max(np.abs(w))  # Normalize weights to the maximum absolute value
+            gamma  = resp_gamma_g + resp_gamma_s
+            gamma /= np.max(np.abs(gamma))  # Normalize weights to the maximum absolute value
             for resp_idx in range(n_responding_neurons):    
                 for resp_jdx in range(n_responding_neurons):
                     if resp_Es[resp_idx, resp_jdx] < 0 :
-                        w[resp_idx, resp_jdx] =  resp_gamma_g[resp_idx, resp_jdx] - resp_gamma_s[resp_idx, resp_jdx]
+                        gamma[resp_idx, resp_jdx] =  resp_gamma_g[resp_idx, resp_jdx] - resp_gamma_s[resp_idx, resp_jdx]
 
 
-            model_parameters["w"] = w
+            model_parameters["gamma"] = gamma
 
 
             # Plot resp_gamma_g and gamma_s as heatmaps
@@ -223,11 +224,11 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                     
                 else:
                     print(f"Warning: Cache file '{cache_file_path}' does not exist. Proceeding without loading cached parameters.")
-                    model_parameters["w"] = w
+                    model_parameters["gamma"] = gamma
                     
 
-            if model_parameters["w"].shape[0] != n_responding_neurons:
-                model_parameters["w"] = w
+            if model_parameters["gamma"].shape[0] != n_responding_neurons:
+                model_parameters["gamma"] = gamma
 
             Y_nonlin_fit = np.zeros_like(signal_smooth[:, responding_neurons, stim_begin_idx:])
 
@@ -261,19 +262,21 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             # Lower the sampling rate so fitting is not so time consuming
 
-            lowering_resolution_step = 2
+            lowering_resolution_step = 8
             fitting_window = 80
 
             print("NEGF fitting")
             min_constrain_dict = {
                                 "tau": 0.0001  ,             
-                                "w": -1000,                   # Synaptic weight
+                                "epsilon": -1000,                   # Synaptic weight
+                                "gamma": -1000,                   # Synaptic weight
                                 "beta": 0.00001,                # Steepness of the sigmoid function
                                 "xth": -100.0,                  # Threshold potential for synapse activation
                             }
             max_constrain_dict = {
                                 "tau":1000  ,             
-                                "w": 1000,                   # Synaptic weight
+                                "epsilon": 1000,                   # Synaptic weight
+                                "gamma": 1000,                   # Synaptic weight
                                 "beta": 1000,                # Steepness of the sigmoid function
                                 "xth": 100.0,                  # Threshold potential for synapse activation
                             }
@@ -282,14 +285,14 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
                 x=signal_smooth[:, responding_neurons, stim_begin_idx:stim_begin_idx+fitting_window:lowering_resolution_step],
                 dt=lowering_resolution_step * dt,
                 target_nodes=np.arange(1, n_responding_neurons),  # Exclude index 0 (stimulated neuron)
-                max_iters=1000,
+                max_iters=2000,
                 constrain=(min_constrain_dict, max_constrain_dict),
-                rms_tol=1e-5,
+                rms_tol=1e-6,
                 learning_rate = 5e-3,
                 beta1 = 0.9,
                 beta2 = 0.99,
                 eps = 1e-3,
-                parameter_to_fit_list=['tau', 'w', 'beta', 'xth'],
+                parameter_to_fit_list=['tau', 'beta', 'epsilon', 'xth'],
                 #loss_method='correlation'
             )
 
@@ -317,7 +320,13 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
             #########################################################################################################################################################
 
             # plot neural network after fitting
-            nlfc.utils.netplots.neural_network(fitted_parameters["w"], fitted_parameters["w"],  fitted_parameters["w"], responding_neurons_labels, save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_fitted_parameters.png'))
+            nlfc.utils.netplots.neural_network(
+                fitted_parameters["gamma"],
+                np.zeros_like(fitted_parameters["gamma"]),
+                np.zeros_like(fitted_parameters["gamma"]),
+                responding_neurons_labels,
+                save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_fitted_parameters.png')
+            )
 
             # nodes at real positions
             #nlfc.utils.netplots.neural_network(fitted_parameters["w"], fitted_parameters["gamma_s"], fitted_parameters["E_s"], responding_neurons_labels, positions=responding_neurons_positions[:, [0,1]], save_path=os.path.join(output_figure_dir, f'Neural_Network_responding_only_after_fit_real_positions.png'))
@@ -475,7 +484,7 @@ for (worm_idx, worm_dataset_path) in enumerate(worms_datasets_paths_list):
 
             # Flatten the matrices for scatter plotting
             distances = distance_matrix_responding_neurons.flatten()
-            w_values = fitted_parameters["w"].flatten()
+            w_values = fitted_parameters["gamma"].flatten()
 
 
             # Filter out None or NaN values from distances and corresponding w_values

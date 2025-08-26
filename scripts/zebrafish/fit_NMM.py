@@ -25,6 +25,10 @@ spondata_tag = "20250625_5_1_spondata.mat"
 # "20250625_5_2_data.mat"
 # "20250625_6_2_data.mat"
 
+fitting_window = 100
+
+lowering_fit_resolution_step = 2
+
 
 dt = 0.3
 
@@ -147,7 +151,7 @@ model_parameters = {
 
 lif_gf = nlfc.GreenFunctions(
     model = NM(n_regions, model_parameters),
-    x = data[1:4],
+    x = data[1:4, :, 0:fitting_window:lowering_fit_resolution_step],
     dt = dt,
 )
 

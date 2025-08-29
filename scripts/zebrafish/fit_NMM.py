@@ -30,7 +30,7 @@ spondata_tag = "20250625_5_1_spondata.mat"
 
 #regions to analyze
 
-regions = np.array([34, 35, 36, 44, 45]) #p.arange(53)  # np.array([2, 4, 6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45, 50])
+regions = np.arange(53)  # np.array([34, 35, 36, 44, 45]) # np.array([2, 4, 6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45, 50])
 
 n_regions = regions.shape[0]
 
@@ -193,7 +193,7 @@ for i in np.arange(0, n_regions):
             continue
         #nlfc.utils.plots.t_t_heatmap(x, g[i, j, :, :], os.path.join(ie_dir, f'negf_g_heatmap_neuron_pair_{i}_{j}_stimulation_{str(ie)}.png'))
         
-        nlfc.utils.plots.time_level_curves( dt*np.arange(time_len), nm_kernels_spon.g[0][i, j], nm_kernels_spon.g[0][i, j,  -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {i}<-{j}", save_path= os.path.join(output_fig_dir,f'fitted_negf_direct_g_neurons_neuron_pair_{i}<-{j}.png'))
+        nlfc.utils.plots.time_level_curves( dt*np.arange(time_len), nm_kernels_spon.g[0][i, j], nm_kernels_spon.g[0][i, j,  -1], xlabel=None, ylabel="g(t,t')", title=f"Neurons : {i}<-{j}", save_path= os.path.join(output_fig_dir,f'fitted_negf_direct_g_neurons_neuron_pair_{i}<-{j}_nRegions{n_regions}.png'))
         
         #nlfc.utils.plots.t_t_heatmap(time_fit, G[:, :, i, 0], os.path.join(ie_dir, f'negf_G{G_degree}_heatmap_neuron_pair_{labels[n_regions[i]]}_{labels[stim]}_stimulation_{str(ie)}.png'))
         #nlfc.utils.plots.time_level_curves(time_fit, G[i, j], G[0][i, j][-1, :], xlabel=None, ylabel="G(t,t')", title=f"Neurons : {i}<-{j}", save_path= os.path.join(stimulus_fig_path,f'fitted_negf_G_neurons_neuron_pair_{i}<-{j}.png'))
@@ -233,7 +233,7 @@ if plot_data:
     plt.ylabel("Region")
     plt.title(f"Traces of regions for spontaneous activity")
 
-    plt.savefig(os.path.join(output_fig_dir, f"spontaneous_traces_predictions.png"))
+    plt.savefig(os.path.join(output_fig_dir, f"spontaneous_traces_predictions_nRegions{n_regions}.png"))
     plt.close()
 
     # plot training dataset
@@ -283,7 +283,7 @@ if plot_data:
         plt.ylabel("Region")
         plt.title(f"Traces of regions for stimulated activity trial #{trials[trial_idx]}")
 
-        plt.savefig(os.path.join(output_fig_dir_stim_trials, f"stimulated_traces_predictions_trial{trial_idx}.png"))
+        plt.savefig(os.path.join(output_fig_dir_stim_trials, f"stimulated_traces_predictions_nRegions{n_regions}_trial{trial_idx}.png"))
         plt.close()
 
 

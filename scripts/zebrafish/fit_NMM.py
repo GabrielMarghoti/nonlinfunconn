@@ -38,7 +38,7 @@ dt = 0.3
 
 fitting_window = 120
 
-lowering_fit_resolution_step = 4
+lowering_fit_resolution_step = 6
 
 file_path = os.path.join(data_dir, stimdata_tag)
 

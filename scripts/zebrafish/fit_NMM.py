@@ -30,7 +30,7 @@ spondata_tag = "20250625_5_1_spondata.mat"
 
 #regions to analyze
 
-regions = np.arange(53) # np.array([34, 35, 36, 44, 45]) # np.array([2, 4, 6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45, 50])
+regions = np.array([34, 35, 36, 44, 45]) #p.arange(53)  # np.array([2, 4, 6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45, 50])
 
 n_regions = regions.shape[0]
 
@@ -40,7 +40,7 @@ dt = 0.3
 
 fitting_window = 120
 
-lowering_fit_resolution_step = 6
+lowering_fit_resolution_step = 2
 
 file_path = os.path.join(data_dir, stimdata_tag)
 

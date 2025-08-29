@@ -109,7 +109,7 @@ class NM:
 
         self.ts = np.arange(0, self.time_len * self.dt, self.dt)
         ts_diff =  self.ts[:, np.newaxis] - self.ts # (time_len, time_len)
-        ts_diff = np.maximum(ts_diff, 0)
+        ts_diff = np.minimum(ts_diff, 0)
         heaviside_func = self.heaviside(ts_diff)
 
         # SHAPE: (num_nodes, num_nodes, time_len, time_len)

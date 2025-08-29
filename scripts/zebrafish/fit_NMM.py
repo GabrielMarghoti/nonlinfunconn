@@ -112,7 +112,7 @@ nm_kernels = nlfc.GreenFunctions(
 
 print("NEGF fitting")
 min_constrain_dict = {
-                    "tau": 0.0001  ,             
+                    "tau": 0.00001  ,             
                     "w": -1000,                   # Synaptic weight
                     "beta": 0.00001,                # Steepness of the sigmoid function
                     "xth": -100.0,                  # Threshold potential for synapse activation
@@ -144,14 +144,6 @@ fitted_parameters = nm_kernels.ADAM_fit(
 
 print('FITTING DONE')
 print("fitted parameters: ", fitted_parameters['w'])
-
-# Set main diagonal of fitted_parameters['w'] to 0
-if isinstance(fitted_parameters['w'], np.ndarray):
-    np.fill_diagonal(fitted_parameters['w'], 0)
-elif isinstance(fitted_parameters['w'], list):
-    w_array = np.array(fitted_parameters['w'])
-    np.fill_diagonal(w_array, 0)
-    fitted_parameters['w'] = w_array
 
 # Save parameters after fitting as a tab-delimited text file
 with open(os.path.join(output_data_dir, f"fitted_parameters_{regions}.txt"), "w") as f:

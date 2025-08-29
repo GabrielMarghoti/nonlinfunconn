@@ -109,7 +109,7 @@ class NM:
 
         self.ts = np.arange(0, self.time_len * self.dt, self.dt)
         ts_diff =  self.ts[:, np.newaxis] - self.ts # (time_len, time_len)
-
+        ts_diff = np.maximum(ts_diff, 0)
         heaviside_func = self.heaviside(ts_diff)
 
         # SHAPE: (num_nodes, num_nodes, time_len, time_len)
@@ -117,14 +117,13 @@ class NM:
 
         g = np.zeros(green_shape)
 
-
         for i in range(num_nodes):
             for j in range(num_nodes):
                 if self.w[i, j] == 0:
                     continue  # Skip non-connected neurons
                 
                 small_delta_mask = np.abs(delta_xs[j]) >= 0.0001
-
+                
                 # Compute Green's function as before
                 g[i, j][:, small_delta_mask] = heaviside_func[:, small_delta_mask] * np.exp(-ts_diff[:, small_delta_mask] / self.tau[i]) * self.w[i, j] * (
                     (self.phi(xs[j, small_delta_mask], self.beta[i, j], self.xth[i, j]) - self.phi(xs[j, 0], self.beta[i, j], self.xth[i, j]))

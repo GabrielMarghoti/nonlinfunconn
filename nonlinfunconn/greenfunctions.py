@@ -373,7 +373,7 @@ class GreenFunctions:
                 # Apply constraints if provided
                 if constrain is not None and key in constrain[0]:
                     p[key] = np.clip(p[key], constrain[0][key], constrain[1][key])
-                if not self_connection and key == "w":
+                if (not self_connection) and (key == "w"):
                     np.fill_diagonal(p[key], 0)
 
             current_loss = loss(self, p, x, target)

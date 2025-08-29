@@ -30,9 +30,11 @@ spondata_tag = "20250625_5_1_spondata.mat"
 
 #regions to analyze
 
-regions = np.array([34, 35, 36, 44, 45]) # np.array([2, 4, 6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45, 50])
+regions = np.arange(53) # np.array([34, 35, 36, 44, 45]) # np.array([2, 4, 6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45, 50])
 
-trials = np.array([5,7,8,11,12, 19]) #
+n_regions = regions.shape[0]
+
+trials = np.array([5,7,8,11,12,19]) #
 
 dt = 0.3
 
@@ -69,7 +71,6 @@ else:
 data = data[trials][:, regions, :]
 spondata = spondata[regions, :]
 
-n_regions = regions.shape[0] # data.shape[1]
 
 
 model_parameters = {
@@ -80,7 +81,7 @@ model_parameters = {
 }
 if load_cache:
     # Check if the cache file exists
-    cache_file_path = os.path.join(output_data_dir, f"fitted_parameters_{regions}.pkl")
+    cache_file_path = os.path.join(output_data_dir, f"fitted_parameters_nRegions{n_regions}.pkl")
     
     if os.path.exists(cache_file_path):
         # Load parameters after fitting from the .pkl file
@@ -146,14 +147,14 @@ print('FITTING DONE')
 print("fitted parameters: ", fitted_parameters['w'])
 
 # Save parameters after fitting as a tab-delimited text file
-with open(os.path.join(output_data_dir, f"fitted_parameters_{regions}.txt"), "w") as f:
+with open(os.path.join(output_data_dir, f"fitted_parameters_nRegions{n_regions}.txt"), "w") as f:
     f.write("Parameter\tValue\n")
     for key, value in fitted_parameters.items():
         f.write(f"{key}\t{value}\n")
 f.close()
 
 # Save parameters after fitting in a JSON format for easier loading
-with open(os.path.join(output_data_dir, f"fitted_parameters_{regions}.pkl"), "wb") as f:
+with open(os.path.join(output_data_dir, f"fitted_parameters_nRegions{n_regions}.pkl"), "wb") as f:
     pickle.dump(fitted_parameters, f)
 
 f.close()

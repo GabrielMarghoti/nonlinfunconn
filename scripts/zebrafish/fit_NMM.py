@@ -130,13 +130,14 @@ fitted_parameters = nm_kernels.ADAM_fit(
     #target_nodes=np.arange(0, n_regions),  
     max_iters=1000,
     constrain=(min_constrain_dict, max_constrain_dict),
-    rms_tol=1e-7,
+    rms_tol=1e-6,
     learning_rate = 5e-3,
     beta1 = 0.9,
     beta2 = 0.99,
     eps = 1e-3,
     parameter_to_fit_list=['tau', 'w', 'beta', 'xth'],
-    #loss_method='correlation'
+    #loss_method='correlation',
+    verbose = True,
 )
 
 
@@ -184,8 +185,8 @@ nm_kernels_spon = nlfc.GreenFunctions(
 
 predspondata = np.zeros_like(spondata)
 
-n_regions = spondata.shape[0]
 time_len = spondata.shape[1]
+
 for i in np.arange(0, n_regions):
     
     predspondata[i, :] = np.full_like(predspondata[i, :], spondata[i, 0])

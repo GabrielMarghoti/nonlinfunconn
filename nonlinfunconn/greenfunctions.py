@@ -246,6 +246,7 @@ class GreenFunctions:
         eps: float = 1e-5,
         p0: Optional[np.ndarray] = None,
         loss_method = None,
+        verbose = False,
     ):
         """
         Fit the model using Adam gradient descent with parameter dict support.
@@ -301,6 +302,7 @@ class GreenFunctions:
         def loss(variant_self, p, X, Y):
 
             err = 0.0
+            norm_factor = np.sum(np.abs(Y))
             for trial_idx in range(n_trials):
                 X_trial = X[trial_idx]
                 Y_trial = Y[trial_idx]
@@ -320,8 +322,8 @@ class GreenFunctions:
                 if loss_method == 'correlation':
                     err += correlation_loss(Y_pred[target_nodes], Y_trial[target_nodes])
                 else:
-                    err += np.sum(np.abs(Y_pred[target_nodes] - Y_trial[target_nodes])) / (n_trials * n_targets * time_len)
-            return err 
+                    err += np.sum(np.abs(Y_pred[target_nodes] - Y_trial[target_nodes]))
+            return err / (norm_factor)
 
         def compute_grad(param_dict, X, Y,param_scale =None, epsilon_factor=1e-3):
             loss_0 = loss(self, param_dict, X, Y)
@@ -373,7 +375,7 @@ class GreenFunctions:
 
             current_loss = loss(self, p, x, target)
 
-            if t % 10 == 0 or t == 1:
+            if verbose and t % 10 == 0 or t == 1:
                 print(f"Iteration {t}, Loss: {current_loss:.6f}")
 
             if not isinstance(current_loss, float) or np.isnan(current_loss) or np.isinf(current_loss): 

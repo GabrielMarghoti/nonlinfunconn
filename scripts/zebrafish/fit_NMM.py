@@ -30,7 +30,7 @@ spondata_tag = "20250625_5_1_spondata.mat"
 
 #regions to analyze
 
-regions = np.arange(53)  # np.array([34, 35, 36, 44, 45]) # np.array([2, 4, 6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45, 50])
+regions =np.array([6, 8, 10, 16, 20, 28, 30, 34, 35, 36, 44, 45]) #np.arange(53)  # np.array([34, 35, 36, 44, 45]) # 
 
 n_regions = regions.shape[0]
 
@@ -40,7 +40,7 @@ dt = 0.3
 
 fitting_window = 120
 
-lowering_fit_resolution_step = 2
+lowering_fit_resolution_step = 20
 
 file_path = os.path.join(data_dir, stimdata_tag)
 
@@ -50,8 +50,8 @@ print(f"Loading data from: {file_path}")
 
 print(f"Loading spontaneous data from: {sponfile_path}")
 
-output_data_dir = os.path.join(data_dir, stimdata_tag.replace(".mat", "_fitted_model_results"))
-output_fig_dir = os.path.join(fig_dir, stimdata_tag.replace(".mat", "_fitted_model_results"))
+output_data_dir = os.path.join(data_dir, stimdata_tag.replace(".mat", f"_fitted_model_results_n_regions{n_regions}"))
+output_fig_dir = os.path.join(fig_dir, stimdata_tag.replace(".mat", f"_fitted_model_results_n_regions{n_regions}"))
 os.makedirs(output_data_dir, exist_ok=True)
 os.makedirs(output_fig_dir, exist_ok=True)
 
@@ -106,7 +106,7 @@ elif isinstance(model_parameters['w'], list):
 nm_kernels = nlfc.GreenFunctions(
     model = NM(n_regions, model_parameters),
     x = data[:, :, 0:fitting_window:lowering_fit_resolution_step],
-    dt = dt,
+    dt = dt*lowering_fit_resolution_step,
 )
 
 
@@ -127,7 +127,7 @@ max_constrain_dict = {
 
 fitted_parameters = nm_kernels.ADAM_fit(
     x = data[:, :, 0:fitting_window:lowering_fit_resolution_step],
-    dt = dt,
+    dt = dt*lowering_fit_resolution_step,
     #target_nodes=np.arange(0, n_regions),  
     max_iters=1000,
     constrain=(min_constrain_dict, max_constrain_dict),
@@ -139,6 +139,7 @@ fitted_parameters = nm_kernels.ADAM_fit(
     parameter_to_fit_list=['tau', 'w', 'beta', 'xth'],
     #loss_method='correlation',
     verbose = True,
+    self_connection = True,
 )
 
 

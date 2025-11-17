@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 import networkx as nx
+import os
 
 # --- 1. Define the Kuramoto model ODE (Direct Summation) ---
 def kuramoto_model_direct(t, thetas, K, omegas, A):
@@ -34,7 +35,7 @@ def simulate_kuramoto_direct_sum(N=50, sim_time=15, K_values=None, A=None, Kmax=
     Runs the simulation for a range of K values using the direct summation model.
     """
     if K_values is None:
-        K_values = np.linspace(0,Kmax, 41)
+        K_values = np.linspace(0,Kmax, 101)
         
     if A is None:
         A = np.ones((N, N)) 
@@ -48,7 +49,7 @@ def simulate_kuramoto_direct_sum(N=50, sim_time=15, K_values=None, A=None, Kmax=
     t_eval = np.linspace(sim_time - 5, sim_time, 100) 
     
     # Initialize oscillators
-    omegas =  np.random.normal(0, 1, N) # np.ones(N)#
+    omegas =  np.ones(N)#np.random.normal(0, 1, N) # 
     
     print(f"Running simulation for K values (Direct Summation, N={N})...")
     
@@ -105,6 +106,7 @@ def simulate_kuramoto_direct_sum(N=50, sim_time=15, K_values=None, A=None, Kmax=
                     
                     forces1n[i,j]   += ((K/(N))*A[i,j]*np.sin(dif_ij))  ##(1 / N)*
                     for k in range(N):
+                        forces2n[i,j,k] += (K/N)*A[i,j]*np.cos(dif_ij)*(omegas[j]-omegas[i])
                         dif_ik = current_thetas[k] - current_thetas[i]
                         dif_jk = current_thetas[k] - current_thetas[j]
                         forces2n[i,j,k] += ((K*K/(N*N))*A[i,j]*np.cos(dif_ij)*(A[j,k]*np.sin(dif_jk)-A[i,k]*np.sin(dif_ik)))  
@@ -121,10 +123,12 @@ def simulate_kuramoto_direct_sum(N=50, sim_time=15, K_values=None, A=None, Kmax=
 # --- 3. Run the simulation and plot the results ---
 if __name__ == "__main__":
     # N=50 is a good compromise for speed. N=100 will be noticeably slower.
-    N = 60
+    N = 25
 
-    A, A_name = None, "all_to_all"
+    A, A_name = np.ones((N, N)) , "all_to_all"
+    
     '''
+    
     # create a Watts–Strogatz small-world network for the given N
     k = min(6, N-1)
     if k % 2 == 1:
@@ -134,8 +138,11 @@ if __name__ == "__main__":
     G = nx.watts_strogatz_graph(N, k, p, seed=seed)
     A = nx.to_numpy_array(G, dtype=float)
     np.fill_diagonal(A, 0.0)
+    
     A_name = f"smallworld_k{k}_p{p}"
+    
     '''
+
 
     '''
     # create a 1D ring lattice where each node connects only to its first neighbors (periodic)
@@ -158,7 +165,8 @@ if __name__ == "__main__":
     np.fill_diagonal(A, 0.0)
     A_name = f"ring_second_neighbors_N{N}"
 
-    Kmax = 1/np.max(np.abs(np.linalg.eigvals(A))) * 1000.0
+
+    Kmax = 1/np.max(np.abs(np.linalg.eigvals(A))) * 100.0
 
     K_vals, r_vals, forces1n, forces2n = simulate_kuramoto_direct_sum(N=N, A=A, Kmax=Kmax)
     K_len = np.zeros(len(K_vals))
@@ -196,48 +204,66 @@ if __name__ == "__main__":
                     elif k != j and j != i:
                         _f2n_idifjdifk.append(forces2n[idx][i,j,k])
     
-        f1n_ieqj[idx] = np.sum(_f1n_ieqj)
-        f1n_idifj[idx] =  np.sum(_f1n_idifj)
+        f1n_ieqj[idx] = np.mean(_f1n_ieqj)
+        f1n_idifj[idx] =  np.mean(_f1n_idifj)
 
-        f2n_ieqjeqk[idx]   =  np.sum(_f2n_ieqjeqk)
-        f2n_ieqjdifk[idx]  =  np.sum(_f2n_ieqjdifk)
-        f2n_idifjeqk[idx]  =  np.sum(_f2n_idifjeqk)
-        f2n_jdifieqk[idx]  =  np.sum(_f2n_jdifieqk)
-        f2n_idifjdifk[idx] =  np.sum(_f2n_idifjdifk)
+        f2n_ieqjeqk[idx]   =  np.mean(_f2n_ieqjeqk)
+        f2n_ieqjdifk[idx]  =  np.mean(_f2n_ieqjdifk)
+        f2n_idifjeqk[idx]  =  np.mean(_f2n_idifjeqk)
+        f2n_jdifieqk[idx]  =  np.mean(_f2n_jdifieqk)
+        f2n_idifjdifk[idx] =  np.mean(_f2n_idifjdifk)
 
 
-    plt.figure(figsize=(10, 6))
-    
-    # Plot in three stacked panels: (1) order parameter, (2) 1st-neighbor forces, (3) 2nd-neighbor forces
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10, 12))
-    fig.suptitle("Kuramoto Model (Direct Summation): Order vs. Forces", fontsize=16)
+    figs_dir = "figures"
+    os.makedirs(figs_dir, exist_ok=True)
 
-    # Panel 1: Order parameter
-    ax1.plot(K_vals, r_vals, 'o-', color='black', label='Order Parameter (r)')
-    ax1.set_ylabel('Order Parameter (r)', color='black', fontsize=12)
-    ax1.tick_params(axis='y', colors='black')
-    ax1.grid(True)
-    ax1.legend(fontsize=10)
+    # --- Plot 1: Order parameter ---
+    plt.figure(figsize=(8, 5))
+    plt.plot(K_vals, r_vals, 'o-', color='black', label='Order Parameter (r)')
+    plt.xlabel("Coupling Strength (K)")
+    plt.ylabel("Order Parameter (r)")
+    plt.title(f"Kuramoto Order Parameter (N={N}, A={A_name})")
+    plt.grid(True)
+    plt.legend()
+    order_path = os.path.join(figs_dir, f"kuramoto_direct_order_N{N}_A{A_name}.png")
+    plt.tight_layout()
+    plt.savefig(order_path)
+    plt.close()
 
-    # Panel 2: 1st-neighbor forces
-    ax2.plot(K_vals, f1n_ieqj, 's-', color='red', label='1st neigh. i=j')
-    ax2.plot(K_vals, f1n_idifj, '--', color='orange', label='1st neigh. i!=j')
-    ax2.set_ylabel('Avg. 1st-neigh. interaction', fontsize=12)
-    ax2.grid(True)
-    ax2.legend(fontsize=10)
+    # --- Plot 2: First-neighbor interactions ---
+    plt.figure(figsize=(8, 5))
+    plt.plot(K_vals, f1n_ieqj, 's-', color='red', label='1st neigh. i=j')
+    plt.plot(K_vals, f1n_idifj, '--', color='orange', label='1st neigh. i!=j')
+    plt.xlabel("Coupling Strength (K)")
+    plt.ylabel("Avg. 1st-neigh. interaction")
+    plt.title(f"First-neighbor Interactions (N={N}, A={A_name})")
+    plt.grid(True)
+    plt.legend()
+    f1_path = os.path.join(figs_dir, f"kuramoto_direct_f1n_N{N}_A{A_name}.png")
+    plt.tight_layout()
+    plt.savefig(f1_path)
+    plt.close()
 
-    # Panel 3: 2nd-neighbor forces (multiple categories)
-    ax3.plot(K_vals, f2n_ieqjeqk, linestyle='-',  color='#1f77b4', linewidth=1.6, label='2nd neigh. i=j=k')
-    ax3.plot(K_vals, f2n_ieqjdifk, linestyle='--', color='#2ca02c', linewidth=1.6, label='2nd neigh. i=j!=k')
-    ax3.plot(K_vals, f2n_idifjeqk, linestyle=':',  color='#17becf', linewidth=1.6, label='2nd neigh. i!=j=k')
-    ax3.plot(K_vals, f2n_jdifieqk, linestyle='-.', color='#9467bd', linewidth=1.6, label='2nd neigh. k=i!=j')
-    ax3.plot(K_vals, f2n_idifjdifk, linestyle=(0, (1, 1)), color='#8c564b', linewidth=1.6, label='2nd neigh. i!=j!=k')
-    ax3.set_ylabel('Avg. 2nd-neigh. interaction', fontsize=12)
-    ax3.set_xlabel("Coupling Strength (K)", fontsize=12)
-    ax3.grid(True)
-    ax3.legend(fontsize=9, ncol=1)
+    # --- Plot 3: Second-neighbor interactions (five stacked panels) ---
+    f2_list = [
+        (f2n_ieqjeqk,   '2nd neigh. i=j=k',    '-',  '#1f77b4'),
+        (f2n_ieqjdifk,  '2nd neigh. i=j!=k',   '--', '#2ca02c'),
+        (f2n_idifjeqk,  '2nd neigh. i!=j=k',   ':',  '#17becf'),
+        (f2n_jdifieqk,  '2nd neigh. k=i!=j',   '-.', '#9467bd'),
+        (f2n_idifjdifk, '2nd neigh. i!=j!=k',  (0,(1,1)), '#8c564b'),
+    ]
 
+    fig, axes = plt.subplots(len(f2_list), 1, sharex=True, figsize=(9, 12))
+    fig.suptitle(f"Second-neighbor Interactions (N={N}, A={A_name})", fontsize=14)
+    for ax, (data, label, ls, color) in zip(axes, f2_list):
+        ax.plot(K_vals, data, linestyle=ls, color=color, linewidth=1.6, label=label)
+        ax.grid(True)
+        ax.legend(fontsize=9, loc='upper right')
+        ax.set_ylabel(label, fontsize=9)
+    axes[-1].set_xlabel("Coupling Strength (K)")
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(f'kuramoto_direct_r_and_F_N{N}_A{A_name}.png')
-    
-    print("\nPlot saved as 'kuramoto_direct_r_and_F.png'")
+    f2_path = os.path.join(figs_dir, f"kuramoto_direct_f2n_N{N}_A{A_name}.png")
+    plt.savefig(f2_path)
+    plt.close()
+
+    print(f"\nSaved plots:\n - {order_path}\n - {f1_path}\n - {f2_path}")

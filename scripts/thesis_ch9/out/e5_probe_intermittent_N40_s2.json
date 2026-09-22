@@ -1,0 +1,13 @@
+{
+ "K_per_state": 700,
+ "frac_time": {
+  "incoherent": 0.10325156873930405,
+  "coherent": 0.8701385859534915
+ },
+ "linearity_median": 0.032866019277908,
+ "linearity_p90": 0.15623957799414104,
+ "linearity_median_by_state": [
+  0.04177033401475737,
+  0.029151463819740535
+ ]
+}

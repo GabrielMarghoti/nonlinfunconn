@@ -1,0 +1,5 @@
+{
+ "sens_err_dt0.01_vs_0.0025 (max/scale)": 1.208546820112921e-07,
+ "sens_err_dt0.005_vs_0.0025 (max/scale)": 7.53560908246865e-09,
+ "sens_linearity_amp0.05_vs_0.2 (max/scale)": 0.0002508221168665672
+}

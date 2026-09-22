@@ -1,0 +1,14 @@
+  [hh] rho(V1(t0)              ) = -0.012  [-0.020, -0.003]
+  [hh] rho(V3(t0)              ) =  0.084  [0.070, 0.100]
+  [hh] rho(V1..V3(t0)          ) =  0.082  [0.064, 0.096]
+  [hh] rho(V history (6 lags)  ) =  0.088  [0.071, 0.100]
+  [hh] rho(neural state x      ) =  0.093  [0.078, 0.105]
+  [hh] rho(x + noise state     ) =  0.092  [0.077, 0.105]
+  [hh] ground-truth rho(x, eta) = 0.115   irreducible = 0.885   R = 89.6 +- 65.3 mV ms   (100s)
+  [izh] rho(V1(t0)              ) = -0.011  [-0.018, -0.006]
+  [izh] rho(V3(t0)              ) =  0.015  [0.006, 0.023]
+  [izh] rho(V1..V3(t0)          ) =  0.014  [0.004, 0.023]
+  [izh] rho(V history (6 lags)  ) =  0.024  [0.013, 0.035]
+  [izh] rho(neural state x      ) =  0.047  [0.034, 0.059]
+  [izh] rho(x + noise state     ) =  0.052  [0.038, 0.063]
+  [izh] ground-truth rho(x, eta) = 0.073   irreducible = 0.927   R = -24.6 +- 74.0 mV ms   (61s)

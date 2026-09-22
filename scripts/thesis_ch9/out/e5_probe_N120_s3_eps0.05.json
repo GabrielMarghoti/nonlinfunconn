@@ -1,0 +1,14 @@
+{
+ "increasing": {
+  "K": 400,
+  "R2pre_median": 0.9078053832054138,
+  "linearity_median": 0.0856296417822335,
+  "linearity_p90": 0.6690913948890637
+ },
+ "decreasing": {
+  "K": 400,
+  "R2pre_median": 0.1558864265680313,
+  "linearity_median": 0.03484609366581809,
+  "linearity_p90": 0.04182219646422513
+ }
+}

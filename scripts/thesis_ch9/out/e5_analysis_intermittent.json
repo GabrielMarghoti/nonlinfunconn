@@ -1,0 +1,65 @@
+{
+ "p_incoherent_time": 0.10607418643132929,
+ "coherent": {
+  "K": 700,
+  "R_mean": -3.969505407708032,
+  "R_sd": 31.0359798752571,
+  "norm_median": 2.5534635307295384,
+  "norm_p95": 30.753676622672838,
+  "mean_energy_fraction": 0.03545571118593216,
+  "kurtosis_R": 52.12270736776387,
+  "linearity_median": 0.04177033401475737
+ },
+ "incoherent": {
+  "K": 700,
+  "R_mean": -0.29456586722763534,
+  "R_sd": 10.503220491775037,
+  "norm_median": 2.4661379545675253,
+  "norm_p95": 5.693811328436863,
+  "mean_energy_fraction": 0.13538779318332672,
+  "kurtosis_R": 162.06983214203245,
+  "linearity_median": 0.029151463819740535
+ },
+ "between_state_fraction_y_timeweighted": 0.0006764574209228158,
+ "between_state_fraction_y_balanced": 0.0027964285109192133,
+ "between_state_fraction_R_timeweighted": 0.0014651431476597199,
+ "between_state_fraction_E_timeweighted": 0.005792086276919167,
+ "between_state_fraction_E_balanced": 0.023501831672311145,
+ "rho_E_pooled_balanced": {
+  "state label R2pre": {
+   "r2": -0.016885007430366583,
+   "ci95": [
+    -0.03776696352521232,
+    0.002083472671448959
+   ]
+  },
+  "order parameters R1pre,R2pre": {
+   "r2": -0.033954920239932296,
+   "ci95": [
+    -0.05580959053073448,
+    -0.007831636199281242
+   ]
+  },
+  "phase cluster 2": {
+   "r2": 0.31303771811284364,
+   "ci95": [
+    0.25749186667737217,
+    0.3711279700577413
+   ]
+  },
+  "label + phase/amp": {
+   "r2": 0.510696296933574,
+   "ci95": [
+    0.46331633617382467,
+    0.5642914684369231
+   ]
+  },
+  "microscopic state (v,u)": {
+   "r2": 0.49177157448443287,
+   "ci95": [
+    0.43693887256624314,
+    0.5387808624163462
+   ]
+  }
+ }
+}

@@ -318,6 +318,163 @@ def fig_network():
     a.set_ylim(-0.08, 0.62); a.set_ylabel(r'$\rho(\mathcal{S})$ for $\log\|y\|$'); panel(a, 'f', x=-0.14)
     fig.savefig('figs/fig9_6_network.pdf'); plt.close(fig)
 
+# ---------------------------------------------------------------------------
+def fig_modelfree():
+    from matplotlib import cm
+    import matplotlib.gridspec as gridspec
+    fig = plt.figure(figsize=(W, 6.9))
+    gs = gridspec.GridSpec(3, 3, figure=fig, hspace=0.72, wspace=0.42)
+    ax = [[fig.add_subplot(gs[r, c]) for c in range(3)] for r in range(2)]
+    axg = fig.add_subplot(gs[2, :2]); axh = fig.add_subplot(gs[2, 2])
+    models = [('hh', 'Hodgkin--Huxley', BLUE, 'Blues'), ('izh', 'Izhikevich', ORANGE, 'Oranges')]
+    # (a, b) trial-averaged kernel from the input-output covariance
+    for j, (m, lab, clr, cmap) in enumerate(models):
+        d = np.load(f'out/e6_{m}.npz'); tau = d['tau']; K = d['K_all'][:, 2]; se = d['K_se'][:, 2]
+        a = ax[0][j]
+        a.fill_between(tau, K - 2 * se, K + 2 * se, color=clr, alpha=0.3, lw=0)
+        a.plot(tau, K, color=clr, lw=1.1)
+        a.axhline(0, color=MUTED, lw=0.5); a.axvline(0, color=MUTED, lw=0.5, ls=':')
+        a.set_xlim(-10, 60); a.set_xlabel(r'$\tau$ (ms)'); a.set_ylabel(r'$\bar G_{31}(\tau)$')
+        a.set_title(lab); panel(a, 'ab'[j], x=-0.22, y=1.06)
+    # (c) validation against pump-probe: 2.5 ms window averages
+    a = ax[0][2]
+    for m, lab, clr, _ in models:
+        d = np.load(f'out/e6_{m}.npz')
+        a.errorbar(d['Ist_mean'] / 2.5, d['Ipp_mean'] / 2.5, xerr=d['Ist_se'] / 2.5, yerr=d['Ipp_se'] / 2.5, fmt='o',
+                   ms=2.4, color=clr, elinewidth=0.5, capsize=0, label=lab)
+    lim = [-0.45, 0.45]; a.plot(lim, lim, color=MUTED, lw=0.7, ls='--'); a.set_xlim(lim); a.set_ylim(-0.9, 0.9)
+    a.set_xlabel('covariance estimate'); a.set_ylabel('pump--probe estimate'); a.legend(loc='upper left', fontsize=6.5)
+    panel(a, 'c', x=-0.22, y=1.06)
+    # (d-f) conditional kernels
+    spec = [(0, 'hh', 'Kg_V3', r'HH, by $V_3$', 'Blues', False), (1, 'izh', 'Kg_hid', r'Izh., by $u_3$', 'Oranges', False),
+            (2, 'izh', 'Kg_tss', r'Izh., by $t_{\mathrm{last}}$', 'Oranges', True)]
+    for c_, m, key, title, cmap, rev in spec:
+        d = np.load(f'out/e6_{m}.npz'); tau = d['tau']; Kc = d[key].mean(1); nq = Kc.shape[0]
+        vals = np.linspace(0.35, 0.95, nq)[::-1] if rev else np.linspace(0.35, 0.95, nq)
+        a = ax[1][c_]
+        for q in range(nq):
+            a.plot(tau, Kc[q], color=getattr(cm, cmap)(vals[q]), lw=1.0, ls='--' if rev else '-',
+                   label=('lowest' if q == 0 else 'highest' if q == nq - 1 else None))
+        a.axhline(0, color=MUTED, lw=0.5); a.set_xlim(0, 60); a.set_xlabel(r'$\tau$ (ms)')
+        a.set_ylabel(r'$\bar G_{31}(\tau \mid s)$'); a.set_title(title)
+        a.legend(loc='upper right', fontsize=6.5, handlelength=1.5, title='quintile', title_fontsize=6.5)
+        panel(a, 'def'[c_], x=-0.22, y=1.06)
+    ax[1][2].set_ylim(ax[1][1].get_ylim())
+    # (g) state dependence of the weak-probe kernel captured by each observation
+    a = axg
+    keys = ['V3', 'hid', 'tss', 'V3xtss', 'V3xhid']
+    labs = [r'$V_3$', r'hidden', r'$t_{\mathrm{last}}$', r'$V_3$, $t_{\mathrm{last}}$', r'$V_3$, hidden']
+    xx = np.arange(len(keys))
+    for j, (m, lab, clr, _) in enumerate(models):
+        J = json.load(open(f'out/e6_{m}.json'))
+        a.bar(xx + (j - 0.5) * 0.38, [J['spread'][k] for k in keys], 0.36, color=clr, lw=0, label=lab)
+    a.set_xticks(xx); a.set_xticklabels(labs, fontsize=7.5); a.axvline(2.5, color=MUTED, lw=0.5, ls=':')
+    a.set_ylim(0, 1.25); a.set_ylabel(r'state dependence $D(s)$'); a.legend(loc='upper left', fontsize=6.8)
+    panel(a, 'g', x=-0.1, y=1.04)
+    # (h) strong stimulus of Sec. 9.4: reducible fraction with spike history
+    a = axh
+    J4 = json.load(open('out/e4_conditioning.json')); J4c = json.load(open('out/e4c_spikehistory.json'))
+    sets = [('V3(t0)', J4), ('V3 + tss3', J4c), ('V3 + hidden3', J4c), ('neural state x', J4)]
+    labs = [r'$V_3$', r'$+t_{\mathrm{last}}$', r'$+$hid.', r'$\mathbf{x}$']
+    xx = np.arange(len(sets))
+    for j, (m, lab, clr, _) in enumerate(models):
+        r = [src[m]['rho'][k]['r2'] for k, src in sets]; ci = np.array([src[m]['rho'][k]['ci95'] for k, src in sets])
+        off = (j - 0.5) * 0.38
+        a.bar(xx + off, r, 0.36, color=clr, lw=0)
+        a.errorbar(xx + off, r, yerr=[np.array(r) - ci[:, 0], ci[:, 1] - np.array(r)], fmt='none', ecolor=INK, elinewidth=0.6, capsize=1.2)
+        a.axhline(J4[m]['rho_truth_full'], color=clr, ls='--', lw=0.8)
+    a.set_xticks(xx); a.set_xticklabels(labs, fontsize=7.5); a.set_ylim(0, 0.13)
+    a.set_ylabel(r'$\rho(\mathcal{S})$'); a.set_title('stimulus of Sec. 9.4', fontsize=8); panel(a, 'h', x=-0.3, y=1.04)
+    fig.savefig('figs/fig9_7_modelfree.pdf'); plt.close(fig)
+
+# ---------------------------------------------------------------------------
+def fig_nonlinearity():
+    from matplotlib import cm
+    d = np.load('out/e7_pump_sweep.npz'); J = json.load(open('out/e7_pump_sweep.json'))
+    D = d['deltas']; P = list(d['pumps'])
+    fig, ax = plt.subplots(2, 2, figsize=(W, 4.9), gridspec_kw=dict(hspace=0.55, wspace=0.32))
+    # (a) response norm of node 3 across states, for pumps below and above the spike threshold
+    a = ax[0, 0]; NV = d['gap-chem_NV']
+    show = [2.0, 3.0, 3.25, 3.5, 10.0]
+    cols = {2.0: cm.Blues(0.35), 3.0: cm.Blues(0.5), 3.25: cm.Blues(0.62), 3.5: ORANGE, 10.0: '#8f2d0c'}
+    for A in show:
+        i = P.index(A)
+        a.plot(D, NV[i, :, 2], color=cols[A], lw=1.0, label=rf'$A = {A:g}$')
+    a.axhline(1, color=MUTED, lw=0.5, ls=':')
+    a.set_yscale('log'); a.set_xlim(-3, 60); a.set_xlabel(r'$\Delta$ (ms)')
+    a.set_ylabel(r'$\|\delta V_3\| / \|\delta V_3\|_{\mathrm{rest}}$'); a.legend(loc='upper right', fontsize=6.5, ncol=1)
+    panel(a, 'a', x=-0.17)
+    # (b) range of the response norm across states against pump amplitude
+    a = ax[0, 1]
+    for (name, lab), clr, mk in zip([('gap-gap', r'gap $\to$ gap'), ('gap-chem', r'gap $\to$ chem.'), ('chem-chem', r'chem. $\to$ chem.')],
+                                    [BLUE, ORANGE, AQUA], ['o', 's', '^']):
+        y = [J[name]['pumps'][str(A) if str(A) in J[name]['pumps'] else f'{A:g}']['decades_V3'] for A in P]
+        a.plot(P, y, marker=mk, ms=3.5, color=clr, lw=1.0, label=lab)
+    a.axvspan(3.25, 3.5, color=MUTED, alpha=0.25, lw=0)
+    a.text(3.6, 0.3, 'first spike', fontsize=7, color=INK)
+    a.set_xlabel(r'pump amplitude $A$ ($\mu$A\,cm$^{-2}$)'); a.set_ylabel(r'range over $\Delta$ (decades)')
+    a.set_xlim(0, 15.5); a.set_ylim(0, 7); a.legend(loc='lower right', fontsize=6.8); panel(a, 'b', x=-0.17)
+    # (c) propagated signal and membrane response of node 3 (A = 10)
+    a = ax[1, 0]; i = P.index(10.0); NS = d['gap-chem_NS']
+    a.plot(D, NS[i, :, 2], color=ORANGE, lw=1.0, label=r'propagated signal $S_3$')
+    a.plot(D, NV[i, :, 2], color=BLUE, lw=1.0, label=r'membrane response $V_3$')
+    a.axhline(1, color=MUTED, lw=0.5, ls=':')
+    a.set_yscale('log'); a.set_xlim(-3, 60); a.set_xlabel(r'$\Delta$ (ms)'); a.set_ylabel('norm relative to rest')
+    a.legend(loc='lower right', fontsize=6.8); panel(a, 'c', x=-0.17)
+    # (d) spike-time shifts of node 3
+    a = ax[1, 1]; e = load('hh_gap-chem'); s = AN.spike_sensitivity(e['spikes'], float(e['q'])); De = e['deltas']
+    ref = e['spikes_ref']
+    for n, (mk, lab, ms) in [(1, ('s', 'rebound spike', 1.6)), (0, ('o', 'first spike', 2.2))]:
+        a.plot(De, s[:, 2, n], ls='none', marker=mk, ms=ms, color=[BLUE, ORANGE][n], label=lab)
+    for ts in ref[0][~np.isnan(ref[0])]:
+        a.axvline(ts - T_PUMP, color=MUTED, lw=0.6, ls=':')
+    a.axhline(0, color=MUTED, lw=0.5); a.set_xlim(-3, 25)
+    a.set_xlabel(r'$\Delta$ (ms)'); a.set_ylabel(r'$\partial t^{(3)}_n / \partial q$ (ms\,cm$^2$\,nC$^{-1}$)')
+    a.legend(loc='upper right', markerscale=2.5, fontsize=6.8); panel(a, 'd', x=-0.17)
+    fig.savefig('figs/fig9_3_nonlinearity.pdf'); plt.close(fig)
+
+# ---------------------------------------------------------------------------
+def fig_variability():
+    from matplotlib import cm
+    z = np.load('out/e7_amplitude.npz'); J = json.load(open('out/e7_variability.json'))
+    fig, ax = plt.subplots(2, 2, figsize=(W, 4.9), gridspec_kw=dict(hspace=0.55, wspace=0.32))
+    # (a) weak stimulus: distribution of the causal response per unit charge
+    a = ax[0, 0]; R = z['Rq_0.1'].ravel(); dN = z['dN_0.1'].ravel()
+    lim = np.array([-1000, 1000]); bins = np.concatenate([-np.logspace(3, -2, 40), np.logspace(-2, 3, 40)])
+    a.hist(R[dN == 0], bins=bins, color=BLUE, histtype='stepfilled', alpha=0.6, lw=0, label='spike count unchanged')
+    a.hist(R[dN != 0], bins=bins, color=ORANGE, histtype='stepfilled', alpha=0.9, lw=0, label='spike added or removed')
+    a.set_xscale('symlog', linthresh=0.1, linscale=0.4); a.set_yscale('log'); a.set_xlim(-1000, 1000)
+    a.set_xticks([-100, -1, 0, 1, 100]); a.set_xticklabels([r'$-10^2$', r'$-1$', r'$0$', r'$1$', r'$10^2$'])
+    a.set_xlabel(r'response per unit charge, $R/q$'); a.set_ylabel('number of trials'); a.set_ylim(0.8, 3e3)
+    a.legend(loc='upper left', fontsize=6.5); panel(a, 'a', x=-0.17)
+    # (b) noise dependence of the trial-to-trial spread
+    a = ax[0, 1]; ns = J['noise_sweep']; sig = sorted(ns, key=float); s = np.array([float(x) for x in sig])
+    for A, clr, mk, lab in [('0.1', BLUE, 'o', r'weak, $A = 0.1$'), ('10.0', ORANGE, 's', r'strong, $A = 10$')]:
+        a.plot(s, [ns[k][A]['sd'] for k in sig], marker=mk, ms=3.5, color=clr, lw=1.0, label=lab)
+    for k, x in zip(sig, s):
+        a.text(x, 150, f"{ns[k]['rate3_Hz']:.0f}", ha='center', fontsize=6.5, color=MUTED)
+    a.text(0.2, 400, r'rate of node 3 (Hz):', fontsize=6.5, color=MUTED)
+    a.set_yscale('log'); a.set_ylim(0.008, 1500); a.set_xlim(0.1, 2.15)
+    a.set_xlabel(r'noise intensity $\sigma$'); a.set_ylabel(r'SD of $R/q$ across trials'); a.legend(loc='lower right', fontsize=6.5)
+    panel(a, 'b', x=-0.17)
+    # (c) amplitude dependence: all-or-none outcomes and the part fixed at onset
+    a = ax[1, 0]; am = J['amplitude_sweep']; As = sorted(am, key=float); x = np.array([float(v) for v in As])
+    a.plot(x, [am[k]['p_spike_change'] for k in As], marker='o', ms=3.5, color=ORANGE, lw=1.0, label='spike count changed')
+    a.plot(x, [am[k]['icc'] for k in As], marker='s', ms=3.5, color=INK, lw=1.0, label='intraclass correlation')
+    a.set_xscale('log'); a.set_ylim(-0.03, 1.0); a.set_xlabel(r'stimulus amplitude $A$ ($\mu$A\,cm$^{-2}$)')
+    a.set_ylabel('fraction'); a.legend(loc='upper left', fontsize=6.5); panel(a, 'c', x=-0.17)
+    # (d) dependence on the refractoriness of node 3 at onset
+    a = ax[1, 1]; n3 = z['n3_onset']; r = np.argsort(np.argsort(n3)) / (len(n3) - 1); g = np.minimum((r * 10).astype(int), 9)
+    cx = (np.arange(10) + 0.5) / 10
+    for A, clr in [(3.0, cm.Oranges(0.5)), (5.0, cm.Oranges(0.7)), (10.0, cm.Oranges(0.95))]:
+        p = (z[f'dN_{A}'] != 0).mean(1)
+        m = np.array([p[g == k].mean() for k in range(10)]); se = np.array([p[g == k].std(ddof=1) / np.sqrt((g == k).sum()) for k in range(10)])
+        a.fill_between(cx, m - se, m + se, color=clr, alpha=0.2, lw=0)
+        a.plot(cx, m, marker='o', ms=3, color=clr, lw=1.0, label=rf'$A = {A:g}$')
+    a.set_ylim(0, 1.05); a.set_xlabel(r'decile of $n_3$ at stimulus onset'); a.set_ylabel(r'P(spike count changed)')
+    a.legend(loc='lower left', fontsize=6.5); panel(a, 'd', x=-0.17)
+    fig.savefig('figs/fig9_4_variability.pdf'); plt.close(fig)
+
 if __name__ == '__main__':
     which = sys.argv[1:] or ['protocol', 'maps', 'decomposition', 'models']
     for w in which:

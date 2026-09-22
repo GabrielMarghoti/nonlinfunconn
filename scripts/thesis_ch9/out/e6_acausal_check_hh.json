@@ -1,0 +1,38 @@
+[
+ {
+  "seed": 0,
+  "kind": "real",
+  "acausal_rms_z": 1.4874762631349967,
+  "acausal_mean_z": 0.05984086595696197
+ },
+ {
+  "seed": 0,
+  "kind": "null",
+  "acausal_rms_z": 1.2081412169057748,
+  "acausal_mean_z": -0.21061578027316438
+ },
+ {
+  "seed": 1,
+  "kind": "real",
+  "acausal_rms_z": 0.6670147139789645,
+  "acausal_mean_z": -0.22857896503605238
+ },
+ {
+  "seed": 1,
+  "kind": "null",
+  "acausal_rms_z": 0.8720281997680183,
+  "acausal_mean_z": -0.0635558018409954
+ },
+ {
+  "seed": 2,
+  "kind": "real",
+  "acausal_rms_z": 0.7929740091730952,
+  "acausal_mean_z": -0.461666423325229
+ },
+ {
+  "seed": 2,
+  "kind": "null",
+  "acausal_rms_z": 1.0045689523097427,
+  "acausal_mean_z": 0.33782699536725663
+ }
+]

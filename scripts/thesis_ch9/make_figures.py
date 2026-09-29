@@ -475,6 +475,55 @@ def fig_variability():
     a.legend(loc='lower left', fontsize=6.5); panel(a, 'd', x=-0.17)
     fig.savefig('figs/fig9_4_variability.pdf'); plt.close(fig)
 
+# ---------------------------------------------------------------------------
+def fig_benchmark():
+    from matplotlib import cm
+    d = np.load('out/b_benchmark.npz'); J = json.load(open('out/b_benchmark.json'))
+    fig, ax = plt.subplots(2, 2, figsize=(W, 4.9), gridspec_kw=dict(hspace=0.55, wspace=0.34))
+    # (a) gating kernel sigma_{n,V}: analytic, numerical functional derivative, constant-tau approximation
+    a = ax[0, 0]
+    for tp, clr in [(5.5, BLUE), (7.3, ORANGE), (10.0, AQUA)]:
+        c_ = d[f'b1_n_{tp}']; tt, num, an, ap = c_
+        a.plot(tt, an, color=clr, lw=1.1, label=rf"$t' = {tp:g}$ ms")
+        a.plot(tt[::400], num[::400], 'o', ms=3, mfc='white', color=clr)
+        a.plot(tt, ap, color=clr, lw=0.8, ls='--')
+    a.plot([], [], 'o', ms=3, mfc='white', color=INK, label='functional derivative')
+    a.plot([], [], color=INK, lw=0.8, ls='--', label=r'constant $\tau_n$')
+    a.set_xlim(0, 10); a.set_xlabel(r"$t - t'$ (ms)"); a.set_ylabel(r"$\sigma_{n,V}(t,t')$ (mV$^{-1}$ms$^{-1}$)")
+    a.legend(loc='upper right', fontsize=6.3); panel(a, 'a', x=-0.2)
+    # (b) rest self kernel and recovered spectrum
+    a = ax[0, 1]; tau = d['tau2']; G = d['G11']; Gt = d['Gth']
+    a.plot(tau, Gt, color=BLUE, lw=1.1, label=r'$[e^{J\tau}]_{VV}/C_m$')
+    a.plot(tau[::60], G[::60], 'o', ms=3, mfc='white', color=INK, label='functional derivative')
+    a.set_xlim(0, 30); a.set_xlabel(r'$\tau$ (ms)'); a.set_ylabel(r'$G_{11}(\tau)$ at rest')
+    a.legend(loc='center right', bbox_to_anchor=(1.0, 0.33), fontsize=6.3)
+    ins = a.inset_axes([0.52, 0.58, 0.44, 0.38])
+    ej = np.array(J['B2']['eig_J']); ef = np.array(J['B2']['eig_fit'])
+    ins.plot(ej[:, 0], ej[:, 1], 'x', color=BLUE, ms=5, label=r'eig $J$')
+    ins.plot(ef[:, 0], ef[:, 1], 'o', mfc='none', color=INK, ms=6, label='from $G_{11}$')
+    ins.set_xlim(-5, 0.3); ins.set_ylim(-0.7, 0.7); ins.tick_params(labelsize=5.5, pad=1)
+    ins.set_xlabel(r'Re $\lambda$ (ms$^{-1}$)', fontsize=6, labelpad=0); ins.set_ylabel(r'Im $\lambda$', fontsize=6, labelpad=0)
+    ins.legend(fontsize=5.3, loc='upper center', handletextpad=0.2, borderaxespad=0.2); panel(a, 'b', x=-0.2)
+    # (c) short-time powers of the cross kernels
+    a = ax[1, 0]
+    B3 = J['B3']
+    curves = [('gap-gap', 'G21', r'$G_{21}$, gap', BLUE, '-'), ('gap-gap', 'G31', r'$G_{31}$, gap$\to$gap', BLUE, '--'),
+              ('chem-chem', 'G21', r'$G_{21}$, chem.', ORANGE, '-'), ('gap-chem', 'G31', r'$G_{31}$, gap$\to$chem.', MAGENTA, '--'),
+              ('chem-chem', 'G31', r'$G_{31}$, chem.$\to$chem.', ORANGE, '--')]
+    for ch, g_, lab, clr, ls in curves:
+        tt, g = d[f'b3_{ch}_{g_}']; te = tt - 0.5e-4; ok = (te > 0) & (g > 1e-9)
+        a.loglog(te[ok], g[ok], color=clr, ls=ls, lw=1.1, label=lab + rf" (slope {B3[ch][g_]['slope_fit']:.2f})")
+    a.set_xlim(3e-4, 5e-2); a.set_ylim(1e-17, 1e0); a.set_xlabel(r'$\tau$ (ms)'); a.set_ylabel(r'$|G_{k1}(\tau)|$ at rest')
+    a.legend(loc='lower right', fontsize=5.8); panel(a, 'c', x=-0.2)
+    # (d) instantaneous conductance along the spike
+    a = ax[1, 1]; tps = d['tps']
+    a.semilogy(tps - 5.0, d['gtot'], color=BLUE, lw=1.1, label=r'$g_l + \bar g_{Na} m^3 h + \bar g_K n^4$')
+    a.semilogy(tps[::3] - 5.0, d['geff'][::3], 'o', ms=2.6, mfc='white', color=INK, label=r"$-C_m\,\partial_\tau \ln G_{11}|_{\tau \to 0^+}$")
+    a.axvspan(0, 3, color=MUTED, alpha=0.15, lw=0)
+    a.set_xlim(-0.5, 15); a.set_xlabel(r"$t' - t_{\mathrm{pump}}$ (ms)"); a.set_ylabel(r'conductance (mS\,cm$^{-2}$)')
+    a.legend(loc='upper right', fontsize=6.3); panel(a, 'd', x=-0.2)
+    fig.savefig('figs/fig7_benchmark.pdf'); plt.close(fig)
+
 if __name__ == '__main__':
     which = sys.argv[1:] or ['protocol', 'maps', 'decomposition', 'models']
     for w in which:

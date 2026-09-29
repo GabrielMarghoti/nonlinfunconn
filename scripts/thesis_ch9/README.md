@@ -32,6 +32,7 @@ Runtimes are wall-clock on 2 cores.
 | `run_e5_probe_intermittent.py 700 0.0125` | `e5_probe_intermittent_N40_s2.npz` | Sec. 9.5 (~1 min) |
 | `check_e5_linearity.py` | `e5_linearity_scaling.json` | eps scan, Sec. 9.5 |
 | `analyze_e5.py` | `e5_analysis_*.json/npz` | Sec. 9.5 statistics, Fig. 9.6 |
+| `run_b_benchmark.py` | `b_benchmark.json/npz` | Ch. 7, Sec. "Benchmark by Functional Derivatives": gating kernels vs Eq. (sigma_x_V), rest spectrum by matrix pencil, short-time powers of cross kernels, instantaneous conductance (~2 min); figure `make_figures.py benchmark` -> `figures/kernel_benchmark_HH.pdf` |
 | `run_e7_pump_sweep.py` | `e7_pump_sweep.json/npz` | results chapter, Sec. "The Nonlinearity Creates the State Dependence": pump-amplitude sweep of the pump-probe response norms (~2 min) |
 | `run_e7_variability.py` | `e7_variability.json`, `e7_amplitude.npz` | results chapter, Sec. "From State Dependence to Trial-by-Trial Variability": stimulus-amplitude and noise sweeps (~8 min) |
 | `ch9_modelfree.py` | integrators with an injected white-noise probe current (for E6) | |
